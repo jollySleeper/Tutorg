@@ -1,34 +1,14 @@
-# Browser Extension Build Files
-*.pem
-*.crx
-*.xpi
-*.zip
+# Personal notes
+TODO.md
 
-# Development
+# OS files
 .DS_Store
-.vscode/
-.idea/
-*.log
+Thumbs.db
 
-# Temporary files
-*.tmp
-*.bak
+# Editor files
+*.swp
+*.swo
 *~
 
-# Icon generation artifacts
-icons/*.pyc
-icons/__pycache__/
-
-# User data (if testing locally)
-test_emails.html
+# Temporary files
 emails.html
-
-# Package files
-node_modules/
-package-lock.json
-
-# OS specific
-Thumbs.db
-.Spotlight-V100
-.Trashes
-
