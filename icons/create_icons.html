@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Extension Icons</title>
+</head>
+<body>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+    <script>
+        function createIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Gradient background
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // White envelope icon
+            ctx.strokeStyle = 'white';
+            ctx.fillStyle = 'white';
+            ctx.lineWidth = size * 0.05;
+            
+            const padding = size * 0.2;
+            const envWidth = size - 2 * padding;
+            const envHeight = envWidth * 0.6;
+            const x = padding;
+            const y = (size - envHeight) / 2;
+            
+            // Envelope body
+            ctx.strokeRect(x, y, envWidth, envHeight);
+            
+            // Envelope flap
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + envWidth / 2, y + envHeight / 2);
+            ctx.lineTo(x + envWidth, y);
+            ctx.stroke();
+            
+            // Download
+            const link = document.createElement('a');
+            link.download = `icon${size}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Wait for page load then create icons
+        setTimeout(() => {
+            createIcon('canvas16', 16);
+            setTimeout(() => createIcon('canvas48', 48), 100);
+            setTimeout(() => createIcon('canvas128', 128), 200);
+        }, 100);
+    </script>
+</body>
+</html>
