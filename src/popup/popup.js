@@ -22,6 +22,16 @@ class PopupController {
     async init() {
         logger.log('Initializing popup...');
         
+        // Check if in window mode and hide the open window button
+        if (tabs.isWindowMode()) {
+            const openWindowBtn = $('#openWindow');
+            if (openWindowBtn) {
+                openWindowBtn.style.display = 'none';
+            }
+            document.body.classList.add('window-mode');
+            logger.log('Running in window mode');
+        }
+        
         // Detect account
         const account = await this._detectAccount();
         
