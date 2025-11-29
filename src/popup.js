@@ -81,9 +81,25 @@ function setupEventListeners() {
     document.getElementById('runRules').addEventListener('click', runRules);
     document.getElementById('refreshPage').addEventListener('click', refreshPage);
     document.getElementById('openWindow').addEventListener('click', openInWindow);
+    document.getElementById('matchType').addEventListener('change', updateMatchTypeHelp);
     
     // Event delegation for rule actions (toggle, delete, edit)
     document.getElementById('rulesList').addEventListener('click', handleRuleAction);
+}
+
+// Update help text based on selected match type
+function updateMatchTypeHelp() {
+    const matchType = document.getElementById('matchType').value;
+    const helpElement = document.getElementById('matchTypeHelp');
+    
+    const helpTexts = {
+        'subject': 'Matches the exact email subject line.',
+        'subject-contains': 'Matches if the subject contains this text (case-insensitive).',
+        'sender': '⚠️ Matches the sender\'s display name (e.g., "John Doe"), not their email address.',
+        'sender-contains': '⚠️ Matches if sender\'s display name contains this text (case-insensitive). Note: This is the name shown, not the email address.'
+    };
+    
+    helpElement.textContent = helpTexts[matchType] || '';
 }
 
 // Open extension in a new window (like Bitwarden)
@@ -130,6 +146,7 @@ function showAddRuleForm() {
     document.getElementById('addRuleForm').classList.remove('hidden');
     document.getElementById('addRule').disabled = true;
     clearForm();
+    updateMatchTypeHelp();
 }
 
 // Hide add rule form
@@ -172,6 +189,7 @@ function editRule(ruleId) {
     
     document.getElementById('addRuleForm').classList.remove('hidden');
     document.getElementById('addRule').disabled = true;
+    updateMatchTypeHelp();
 }
 
 // Save new rule or update existing
@@ -364,9 +382,9 @@ function showStatus(message, type = 'success') {
 function formatMatchType(matchType) {
     const types = {
         'subject': 'Subject',
-        'sender': 'Sender',
+        'sender': 'Sender Name',
         'subject-contains': 'Subject Contains',
-        'sender-contains': 'Sender Contains'
+        'sender-contains': 'Sender Name Contains'
     };
     return types[matchType] || matchType;
 }
