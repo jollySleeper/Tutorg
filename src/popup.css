@@ -226,6 +226,27 @@ header h1 {
     border-style: dashed;
 }
 
+.rule-item.disabled:hover {
+    opacity: 0.85;
+}
+
+/* Make Enable button stand out on disabled rules */
+.rule-item.disabled .btn-primary {
+    background: #28a745;
+    animation: pulse-enable 2s infinite;
+}
+
+.rule-item.disabled:hover .btn-primary {
+    background: #218838;
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+    transform: scale(1.05);
+}
+
+@keyframes pulse-enable {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(40, 167, 69, 0); }
+}
+
 .rule-header {
     display: flex;
     justify-content: space-between;
