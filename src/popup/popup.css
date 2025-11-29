@@ -51,7 +51,8 @@
     --popup-width: 420px;
     --popup-min-width: 360px;
     --popup-max-width: 600px;
-    --popup-height: 580px;
+    --popup-height: 600px;
+    --popup-max-height: 600px;
     
     /* Transitions */
     --transition-fast: 0.2s ease;
@@ -93,19 +94,23 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 100%;
     overflow: hidden;
 }
 
-/* Window mode - larger */
+/* Window mode - full viewport */
 @media (min-width: 450px) {
     html, body {
         width: 100%;
         height: 100vh;
+        max-height: 100vh;
     }
-    
-    :root {
-        --popup-height: 100vh;
-    }
+}
+
+/* Body class for window mode set by JS */
+body.window-mode, body.window-mode html {
+    height: 100vh;
+    max-height: 100vh;
 }
 
 /* ============================================
@@ -380,7 +385,8 @@ header h1 {
    Scrollable Rules Area
    ============================================ */
 .rules-scroll-area {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0; /* Allow shrinking in flexbox */
     overflow-y: auto;
     padding: var(--spacing-md) var(--spacing-lg);
     background: var(--bg-primary);
