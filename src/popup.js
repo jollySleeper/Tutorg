@@ -91,15 +91,27 @@ function setupEventListeners() {
 function updateMatchTypeHelp() {
     const matchType = document.getElementById('matchType').value;
     const helpElement = document.getElementById('matchTypeHelp');
+    const simpleMatchGroup = document.getElementById('simpleMatchGroup');
+    const complexMatchGroup = document.getElementById('complexMatchGroup');
     
     const helpTexts = {
         'subject': 'Matches the exact email subject line.',
         'subject-contains': 'Matches if the subject contains this text (case-insensitive).',
         'sender': '⚠️ Matches the sender\'s display name (e.g., "John Doe"), not their email address.',
-        'sender-contains': '⚠️ Matches if sender\'s display name contains this text (case-insensitive). Note: This is the name shown, not the email address.'
+        'sender-contains': '⚠️ Matches if sender\'s display name contains this text (case-insensitive). Note: This is the name shown, not the email address.',
+        'sender-and-subject': '🔗 Complex rule: Both sender name AND subject must match (case-insensitive contains).'
     };
     
     helpElement.textContent = helpTexts[matchType] || '';
+    
+    // Toggle between simple and complex input fields
+    if (matchType === 'sender-and-subject') {
+        simpleMatchGroup.classList.add('hidden');
+        complexMatchGroup.classList.remove('hidden');
+    } else {
+        simpleMatchGroup.classList.remove('hidden');
+        complexMatchGroup.classList.add('hidden');
+    }
 }
 
 // Open extension in a new window (like Bitwarden)
@@ -162,6 +174,8 @@ function clearForm() {
     document.getElementById('ruleName').value = '';
     document.getElementById('matchType').value = 'subject';
     document.getElementById('matchValue').value = '';
+    document.getElementById('senderValue').value = '';
+    document.getElementById('subjectValue').value = '';
     document.getElementById('action').value = 'trash';
     document.getElementById('enabled').checked = true;
 }
@@ -183,9 +197,19 @@ function editRule(ruleId) {
     // Populate form with rule data
     document.getElementById('ruleName').value = rule.name;
     document.getElementById('matchType').value = rule.matchType;
-    document.getElementById('matchValue').value = rule.matchValue;
     document.getElementById('action').value = rule.action;
     document.getElementById('enabled').checked = rule.enabled;
+    
+    // Handle complex vs simple match values
+    if (rule.matchType === 'sender-and-subject') {
+        document.getElementById('senderValue').value = rule.senderValue || '';
+        document.getElementById('subjectValue').value = rule.subjectValue || '';
+        document.getElementById('matchValue').value = '';
+    } else {
+        document.getElementById('matchValue').value = rule.matchValue || '';
+        document.getElementById('senderValue').value = '';
+        document.getElementById('subjectValue').value = '';
+    }
     
     document.getElementById('addRuleForm').classList.remove('hidden');
     document.getElementById('addRule').disabled = true;
@@ -196,13 +220,29 @@ function editRule(ruleId) {
 async function saveOrUpdateRule() {
     const ruleName = document.getElementById('ruleName').value.trim();
     const matchType = document.getElementById('matchType').value;
-    const matchValue = document.getElementById('matchValue').value.trim();
     const action = document.getElementById('action').value;
     const enabled = document.getElementById('enabled').checked;
-
-    if (!ruleName || !matchValue) {
-        showStatus('Please fill in all required fields', 'error');
-        return;
+    
+    // Get appropriate match values based on type
+    let matchValue = '';
+    let senderValue = '';
+    let subjectValue = '';
+    
+    if (matchType === 'sender-and-subject') {
+        senderValue = document.getElementById('senderValue').value.trim();
+        subjectValue = document.getElementById('subjectValue').value.trim();
+        
+        if (!ruleName || !senderValue || !subjectValue) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
+    } else {
+        matchValue = document.getElementById('matchValue').value.trim();
+        
+        if (!ruleName || !matchValue) {
+            showStatus('Please fill in all required fields', 'error');
+            return;
+        }
     }
 
     if (editingRuleId) {
@@ -214,6 +254,8 @@ async function saveOrUpdateRule() {
                 name: ruleName,
                 matchType,
                 matchValue,
+                senderValue,
+                subjectValue,
                 action,
                 enabled
             };
@@ -227,6 +269,8 @@ async function saveOrUpdateRule() {
             name: ruleName,
             matchType,
             matchValue,
+            senderValue,
+            subjectValue,
             action,
             enabled,
             account: currentAccount
@@ -273,7 +317,7 @@ function renderRules() {
                 </div>
             </div>
             <div class="rule-details">
-                <span class="rule-match">${formatMatchType(rule.matchType)}: ${escapeHtml(rule.matchValue)}</span>
+                ${formatRuleMatch(rule)}
                 <span class="rule-action">→ ${formatAction(rule.action)}</span>
             </div>
         </div>
@@ -384,9 +428,26 @@ function formatMatchType(matchType) {
         'subject': 'Subject',
         'sender': 'Sender Name',
         'subject-contains': 'Subject Contains',
-        'sender-contains': 'Sender Name Contains'
+        'sender-contains': 'Sender Name Contains',
+        'sender-and-subject': 'Sender + Subject'
     };
     return types[matchType] || matchType;
+}
+
+// Format rule match display (handles complex rules)
+function formatRuleMatch(rule) {
+    if (rule.matchType === 'sender-and-subject') {
+        return `
+            <span class="rule-match rule-match-complex">
+                Sender: ${escapeHtml(rule.senderValue || '')}
+            </span>
+            <span class="rule-match-and">AND</span>
+            <span class="rule-match rule-match-complex">
+                Subject: ${escapeHtml(rule.subjectValue || '')}
+            </span>
+        `;
+    }
+    return `<span class="rule-match">${formatMatchType(rule.matchType)}: ${escapeHtml(rule.matchValue)}</span>`;
 }
 
 // Format action for display

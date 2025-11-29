@@ -127,7 +127,11 @@ function debugPageState() {
 // Process a single rule
 async function processRule(rule) {
     console.log(`[TutOrg] Processing rule: ${rule.name}`);
-    console.log(`[TutOrg] Match type: ${rule.matchType}, Match value: "${rule.matchValue}"`);
+    if (rule.matchType === 'sender-and-subject') {
+        console.log(`[TutOrg] Match type: ${rule.matchType}, Sender: "${rule.senderValue}", Subject: "${rule.subjectValue}"`);
+    } else {
+        console.log(`[TutOrg] Match type: ${rule.matchType}, Match value: "${rule.matchValue}"`);
+    }
     
     // Find matching emails
     const matchingEmails = findMatchingEmails(rule);
@@ -209,6 +213,25 @@ function findMatchingEmails(rule) {
                 if (senderText.toLowerCase().includes(rule.matchValue.toLowerCase())) {
                     matches = true;
                     console.log(`[TutOrg] SENDER CONTAINS MATCH at row ${index}: "${senderText}" contains "${rule.matchValue}"`);
+                }
+                break;
+            }
+
+            case 'sender-and-subject': {
+                // Complex rule: both sender AND subject must match
+                const subjectDiv = row.querySelector('[data-testid="list-row:mail:subject"]');
+                const subjectText = subjectDiv?.textContent?.trim() || '';
+                const senderText = extractSenderFromRow(row);
+                
+                debugInfo.subject = subjectText;
+                debugInfo.sender = senderText;
+                
+                const senderMatches = senderText.toLowerCase().includes((rule.senderValue || '').toLowerCase());
+                const subjectMatches = subjectText.toLowerCase().includes((rule.subjectValue || '').toLowerCase());
+                
+                if (senderMatches && subjectMatches) {
+                    matches = true;
+                    console.log(`[TutOrg] SENDER+SUBJECT MATCH at row ${index}: sender "${senderText}" contains "${rule.senderValue}" AND subject "${subjectText}" contains "${rule.subjectValue}"`);
                 }
                 break;
             }

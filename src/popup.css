@@ -280,6 +280,20 @@ header h1 {
     font-size: 11px;
 }
 
+.rule-match-complex {
+    max-width: 150px;
+}
+
+.rule-match-and {
+    display: inline-block;
+    background: #ffeeba;
+    color: #856404;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
 .rule-form {
     padding: 20px;
     background: #f8f9fa;

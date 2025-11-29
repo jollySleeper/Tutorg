@@ -59,13 +59,25 @@
                     <option value="subject-contains">Subject Contains</option>
                     <option value="sender">Sender Name (exact match)</option>
                     <option value="sender-contains">Sender Name Contains</option>
+                    <option value="sender-and-subject">Sender + Subject (both must match)</option>
                 </select>
                 <div id="matchTypeHelp" class="form-help"></div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="simpleMatchGroup">
                 <label for="matchValue">Match Value</label>
                 <input type="text" id="matchValue" placeholder="e.g., [Fedora Discussion] Summary">
+            </div>
+
+            <div id="complexMatchGroup" class="hidden">
+                <div class="form-group">
+                    <label for="senderValue">Sender Name Contains</label>
+                    <input type="text" id="senderValue" placeholder="e.g., Newsletter">
+                </div>
+                <div class="form-group">
+                    <label for="subjectValue">Subject Contains</label>
+                    <input type="text" id="subjectValue" placeholder="e.g., Weekly Update">
+                </div>
             </div>
 
             <div class="form-group">
