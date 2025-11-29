@@ -219,6 +219,23 @@ class TabService {
     }
 
     /**
+     * Check if we're running in tab mode (browser tab)
+     * @returns {boolean}
+     */
+    isTabMode() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('mode') === 'tab';
+    }
+
+    /**
+     * Check if we're in popup mode (not window or tab)
+     * @returns {boolean}
+     */
+    isPopupMode() {
+        return !this.isWindowMode() && !this.isTabMode();
+    }
+
+    /**
      * Open the popup in a new window
      * @returns {Promise<Object|null>} - Window object or null
      */
@@ -241,6 +258,30 @@ class TabService {
             return newWindow;
         } catch (error) {
             logger.error('Error opening window:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Open the popup as a browser tab (for split-screen usage)
+     * @returns {Promise<Object|null>} - Tab object or null
+     */
+    async openAsTab() {
+        // Store the current Tuta tab before opening in new tab
+        await this.storeCurrentTutaTab();
+        
+        // Add mode=tab param so popup knows it's in tab mode
+        const popupURL = chrome.runtime.getURL('src/popup/popup.html?mode=tab');
+        
+        try {
+            const newTab = await chrome.tabs.create({
+                url: popupURL,
+                active: true
+            });
+            logger.log('Opened as new tab:', newTab.id);
+            return newTab;
+        } catch (error) {
+            logger.error('Error opening as tab:', error);
             return null;
         }
     }

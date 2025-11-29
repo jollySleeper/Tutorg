@@ -34,13 +34,13 @@ class PopupController {
     async init() {
         logger.log('Initializing popup...');
         
-        // Check if in window mode
-        if (tabs.isWindowMode()) {
+        // Hide open buttons when not in popup mode (already in window/tab)
+        if (!tabs.isPopupMode()) {
             const openWindowBtn = $('#openWindow');
-            if (openWindowBtn) {
-                openWindowBtn.style.display = 'none';
-            }
-            document.body.classList.add('window-mode');
+            const openTabBtn = $('#openTab');
+            if (openWindowBtn) openWindowBtn.style.display = 'none';
+            if (openTabBtn) openTabBtn.style.display = 'none';
+            document.body.classList.add('detached-mode');
         }
         
         // Setup event listeners
@@ -211,6 +211,7 @@ class PopupController {
         this._addClickHandler('closeModal', () => this._hideModal());
         this._addClickHandler('runRules', () => this._runRules());
         this._addClickHandler('refreshPage', () => this._refreshPage());
+        this._addClickHandler('openTab', () => this._openAsTab());
         this._addClickHandler('openWindow', () => this._openInWindow());
         this._addClickHandler('retryAccount', () => this._retryAccountDetection());
         this._addClickHandler('exportRules', () => this._exportRules());
@@ -265,7 +266,8 @@ class PopupController {
         const tooltips = {
             'runRules': 'Run all enabled rules on visible emails',
             'refreshPage': '⚠️ Warning: Refreshing may log you out',
-            'openWindow': 'Open in a separate window',
+            'openTab': 'Open as browser tab (for split view)',
+            'openWindow': 'Open in popup window',
             'retryAccount': 'Retry connecting to Tuta Mail',
             'importRules': 'Import rules from JSON file',
             'exportRules': 'Export rules to JSON file'
@@ -521,6 +523,11 @@ class PopupController {
     async _openInWindow() {
         const newWindow = await tabs.openInWindow();
         if (newWindow) window.close();
+    }
+
+    async _openAsTab() {
+        const newTab = await tabs.openAsTab();
+        if (newTab) window.close();
     }
 
     /**
