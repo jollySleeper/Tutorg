@@ -362,6 +362,41 @@ header h1 {
     color: var(--text-primary);
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Text button style (for Import/Export) */
+.btn-text {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: var(--border-radius);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all var(--transition-fast);
+}
+
+.btn-text:hover {
+    color: var(--color-primary);
+    background: rgba(132, 11, 42, 0.1);
+}
+
+.btn-text:active {
+    transform: scale(0.95);
+}
+
+.btn-text svg {
+    flex-shrink: 0;
+}
+
 #rulesList {
     display: flex;
     flex-direction: column;
@@ -748,6 +783,12 @@ footer {
         background: #3d2d00;
         color: #f0d070;
         border-left-color: #d4a000;
+    }
+    
+    /* Text buttons */
+    .btn-text:hover {
+        color: var(--color-primary);
+        background: rgba(184, 64, 94, 0.2);
     }
     
     /* Rule items */

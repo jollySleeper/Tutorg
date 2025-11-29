@@ -214,6 +214,45 @@ class RulesManager {
         if (!this.editingRuleId) return null;
         return this.getRule(this.editingRuleId);
     }
+
+    /**
+     * Get all rules (for export)
+     * @returns {Array} - All rules
+     */
+    getAllRules() {
+        return [...this.rules];
+    }
+
+    /**
+     * Import rules from external source
+     * @param {Array} rules - Rules to import
+     * @param {string} mode - 'merge' or 'replace'
+     * @returns {Promise<number>} - Number of rules imported
+     */
+    async importRules(rules, mode = 'merge') {
+        if (mode === 'replace') {
+            // Replace all existing rules
+            this.rules = rules.map(rule => ({
+                ...rule,
+                id: rule.id || Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                account: this.currentAccount,
+                importedAt: Date.now()
+            }));
+        } else {
+            // Merge: add new rules with new IDs
+            const newRules = rules.map(rule => ({
+                ...rule,
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                account: this.currentAccount,
+                importedAt: Date.now()
+            }));
+            this.rules = [...this.rules, ...newRules];
+        }
+
+        await this.saveRules();
+        logger.log('Imported', rules.length, 'rules in', mode, 'mode');
+        return rules.length;
+    }
 }
 
 // Export singleton instance

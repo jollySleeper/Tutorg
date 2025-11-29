@@ -170,6 +170,8 @@ class PopupController {
         this._addClickHandler('refreshPage', () => this._refreshPage());
         this._addClickHandler('openWindow', () => this._openInWindow());
         this._addClickHandler('retryAccount', () => this._retryAccountDetection());
+        this._addClickHandler('exportRules', () => this._exportRules());
+        this._addClickHandler('importRules', () => this._triggerImport());
 
         // Match type change
         const matchType = $('#matchType');
@@ -181,6 +183,12 @@ class PopupController {
         const rulesList = $('#rulesList');
         if (rulesList) {
             rulesList.addEventListener('click', (e) => this._handleRuleAction(e));
+        }
+
+        // File import handler
+        const importInput = $('#importFileInput');
+        if (importInput) {
+            importInput.addEventListener('change', (e) => this._handleImportFile(e));
         }
     }
 
@@ -210,6 +218,17 @@ class PopupController {
         const retryBtn = $('#retryAccount');
         if (retryBtn) {
             ui.setupTooltip(retryBtn, 'Retry connecting to Tuta Mail tab');
+        }
+
+        // Import/Export tooltips
+        const importBtn = $('#importRules');
+        if (importBtn) {
+            ui.setupTooltip(importBtn, 'Import rules from a JSON file');
+        }
+
+        const exportBtn = $('#exportRules');
+        if (exportBtn) {
+            ui.setupTooltip(exportBtn, 'Export rules to a JSON file for backup');
         }
     }
 
@@ -478,6 +497,113 @@ class PopupController {
         if (newWindow) {
             // Close the popup
             window.close();
+        }
+    }
+
+    /**
+     * Export rules to JSON file
+     */
+    _exportRules() {
+        const rules = rulesManager.getAllRules();
+        
+        if (rules.length === 0) {
+            ui.showStatus('No rules to export', 'error');
+            return;
+        }
+
+        const exportData = {
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+            account: this._currentAccount,
+            rules: rules
+        };
+
+        const jsonString = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        // Create download link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tutorg-rules-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        ui.showStatus(`Exported ${rules.length} rule(s)`, 'success');
+        logger.log('Exported rules:', rules.length);
+    }
+
+    /**
+     * Trigger file input for import
+     */
+    _triggerImport() {
+        const importInput = $('#importFileInput');
+        if (importInput) {
+            importInput.value = ''; // Reset to allow same file
+            importInput.click();
+        }
+    }
+
+    /**
+     * Handle imported file
+     * @param {Event} event - Change event from file input
+     */
+    async _handleImportFile(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            // Validate import data
+            if (!data.rules || !Array.isArray(data.rules)) {
+                ui.showStatus('Invalid file format: missing rules array', 'error');
+                return;
+            }
+
+            // Validate each rule
+            const validRules = data.rules.filter(rule => 
+                rule.name && 
+                rule.matchType && 
+                rule.action &&
+                (rule.matchValue || (rule.senderValue && rule.subjectValue))
+            );
+
+            if (validRules.length === 0) {
+                ui.showStatus('No valid rules found in file', 'error');
+                return;
+            }
+
+            // Ask user how to handle import
+            const existingCount = rulesManager.getAllRules().length;
+            let mode = 'merge'; // Default: merge
+            
+            if (existingCount > 0) {
+                const replace = confirm(
+                    `Found ${validRules.length} rules to import.\n\n` +
+                    `You have ${existingCount} existing rules.\n\n` +
+                    `Click OK to REPLACE all existing rules.\n` +
+                    `Click Cancel to MERGE (add to existing rules).`
+                );
+                mode = replace ? 'replace' : 'merge';
+            }
+
+            // Import rules
+            const imported = await rulesManager.importRules(validRules, mode);
+            rulesManager.renderRules();
+
+            ui.showStatus(
+                `Imported ${imported} rule(s)` + (mode === 'merge' ? ' (merged)' : ' (replaced)'),
+                'success'
+            );
+            logger.log('Imported rules:', imported, 'mode:', mode);
+
+        } catch (error) {
+            logger.error('Import error:', error);
+            ui.showStatus('Error reading file: ' + error.message, 'error');
         }
     }
 }
