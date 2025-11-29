@@ -633,3 +633,142 @@ footer {
     }
 }
 
+/* ============================================
+   Dark Theme (System Preference)
+   ============================================ */
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Colors - keep brand colors */
+        --color-primary: #b8405e;
+        --color-primary-dark: #9a3650;
+        --color-success: #3cb371;
+        --color-success-dark: #2e8b57;
+        --color-danger: #e74c3c;
+        --color-danger-dark: #c0392b;
+        --color-warning: #f39c12;
+        --color-info: #3498db;
+        --color-info-dark: #2980b9;
+        --color-secondary: #7f8c8d;
+        --color-secondary-dark: #6c7a7b;
+        
+        /* Backgrounds */
+        --bg-primary: #1a1a1a;
+        --bg-secondary: #242424;
+        --bg-dark: #0d0d0d;
+        --bg-input: #2d2d2d;
+        
+        /* Text */
+        --text-primary: #e8e8e8;
+        --text-secondary: #b0b0b0;
+        --text-muted: #808080;
+        --text-light: #c0c0c0;
+        
+        /* Borders */
+        --border-color: #3d3d3d;
+    }
+    
+    /* Header gradient adjustment */
+    header {
+        background: linear-gradient(135deg, #4a0d1c 0%, #2d0a12 100%);
+    }
+    
+    /* Account bar */
+    .account-bar {
+        background: var(--bg-dark);
+    }
+    
+    .account-value {
+        background: rgba(184, 64, 94, 0.3);
+    }
+    
+    /* Form inputs */
+    .form-group input[type="text"],
+    .form-group select {
+        background: var(--bg-input);
+        border-color: var(--border-color);
+        color: var(--text-primary);
+    }
+    
+    .form-group input[type="text"]::placeholder {
+        color: var(--text-muted);
+    }
+    
+    .form-group input[type="text"]:focus,
+    .form-group select:focus {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(184, 64, 94, 0.25);
+    }
+    
+    /* Form help text */
+    .form-help {
+        background: #3d2d00;
+        color: #f0d070;
+        border-left-color: #d4a000;
+    }
+    
+    /* Rule items */
+    .rule-item {
+        background: var(--bg-secondary);
+        border-color: var(--border-color);
+    }
+    
+    .rule-item:hover {
+        border-color: var(--color-primary);
+    }
+    
+    .rule-match {
+        background: #1a3d5c;
+        color: #70b8ff;
+    }
+    
+    .rule-match-and {
+        background: #4d3d00;
+        color: #f0d070;
+    }
+    
+    .rule-action {
+        background: #1c4d2a;
+        color: #70e090;
+    }
+    
+    /* Status bar */
+    .status-bar {
+        background: var(--bg-secondary);
+        border-color: var(--border-color);
+    }
+    
+    /* Footer */
+    footer {
+        background: var(--bg-secondary);
+        border-color: var(--border-color);
+    }
+    
+    .help-text kbd {
+        background: #404040;
+    }
+    
+    /* Empty state */
+    .empty-state {
+        color: var(--text-muted);
+    }
+    
+    /* Scrollbar */
+    .rules-section::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+    }
+    
+    .rules-section::-webkit-scrollbar-thumb {
+        background: #4d4d4d;
+    }
+    
+    .rules-section::-webkit-scrollbar-thumb:hover {
+        background: #5d5d5d;
+    }
+    
+    /* Tooltip */
+    .custom-tooltip {
+        background: #404040;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+}
+
