@@ -713,6 +713,28 @@ footer {
     display: none;
 }
 
+.select-with-refresh {
+    display: flex;
+    gap: var(--spacing-xs);
+    align-items: center;
+}
+
+.select-with-refresh select {
+    flex: 1;
+}
+
+.select-with-refresh .btn-icon-small {
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.select-with-refresh .btn-icon-small:hover {
+    background: var(--bg-tertiary);
+    color: var(--color-primary);
+}
+
 .form-hint {
     font-size: 11px;
     color: var(--text-muted);

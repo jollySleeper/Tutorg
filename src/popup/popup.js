@@ -173,6 +173,30 @@ class PopupController {
     }
 
     /**
+     * Refresh folders (called by refresh button)
+     */
+    async _refreshFolders() {
+        logger.log('Refreshing folders...');
+        const btn = $('#refreshFolders');
+        if (btn) {
+            btn.classList.add('spinning');
+            btn.disabled = true;
+        }
+        
+        // Clear cache and reload
+        this._availableFolders = [];
+        await this._loadFolders();
+        
+        if (btn) {
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+        }
+        
+        const count = this._availableFolders.length;
+        ui.showStatus(`Loaded ${count} folder${count !== 1 ? 's' : ''}`, 'success');
+    }
+
+    /**
      * Populate folder select dropdown
      */
     _populateFolderSelect() {
@@ -216,6 +240,7 @@ class PopupController {
         this._addClickHandler('retryAccount', () => this._retryAccountDetection());
         this._addClickHandler('exportRules', () => this._exportRules());
         this._addClickHandler('importRules', () => this._triggerImport());
+        this._addClickHandler('refreshFolders', () => this._refreshFolders());
 
         // Match type change - show/hide complex fields
         const matchType = $('#matchType');
@@ -270,7 +295,8 @@ class PopupController {
             'openWindow': 'Open in popup window',
             'retryAccount': 'Retry connecting to Tuta Mail',
             'importRules': 'Import rules from JSON file',
-            'exportRules': 'Export rules to JSON file'
+            'exportRules': 'Export rules to JSON file',
+            'refreshFolders': 'Refresh folder list from Tuta'
         };
 
         Object.entries(tooltips).forEach(([id, text]) => {
