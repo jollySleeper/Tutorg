@@ -307,7 +307,7 @@ class PopupController {
         ui.setFieldValue('matchValue', '');
         ui.setFieldValue('senderValue', '');
         ui.setFieldValue('subjectValue', '');
-        ui.setFieldValue('action', 'trash');
+        ui.setFieldValue('action', 'select-only');
         ui.setFieldValue('targetFolder', '');
         ui.setCheckboxValue('enabled', true);
     }
