@@ -5,7 +5,8 @@
   "description": "Automatically organize emails based on custom rules",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "notifications"
   ],
   "host_permissions": [
     "https://mail.tuta.com/*",
@@ -17,6 +18,15 @@
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
+    }
+  },
+  "commands": {
+    "run-rules": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
+      },
+      "description": "Run email organization rules"
     }
   },
   "content_scripts": [
