@@ -80,9 +80,26 @@ function setupEventListeners() {
     document.getElementById('cancelRule').addEventListener('click', hideAddRuleForm);
     document.getElementById('runRules').addEventListener('click', runRules);
     document.getElementById('refreshPage').addEventListener('click', refreshPage);
+    document.getElementById('openWindow').addEventListener('click', openInWindow);
     
     // Event delegation for rule actions (toggle, delete, edit)
     document.getElementById('rulesList').addEventListener('click', handleRuleAction);
+}
+
+// Open extension in a new window (like Bitwarden)
+function openInWindow() {
+    const popupURL = chrome.runtime.getURL('src/popup.html');
+    chrome.windows.create({
+        url: popupURL,
+        type: 'popup',
+        width: 450,
+        height: 600,
+        focused: true
+    }, (window) => {
+        console.log('[TutOrg] Opened in new window:', window.id);
+        // Close the popup after opening the window
+        window.close();
+    });
 }
 
 // Handle rule actions via event delegation
