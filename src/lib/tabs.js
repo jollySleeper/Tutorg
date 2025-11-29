@@ -13,6 +13,7 @@ import { storage } from './storage.js';
 class TabService {
     constructor() {
         this._cachedTutaTabId = null;
+        this._contentScriptInjected = new Set(); // Track injected tabs
     }
 
     /**
@@ -117,9 +118,10 @@ class TabService {
     /**
      * Send a message to the Tuta tab
      * @param {Object} message - Message to send
+     * @param {boolean} retry - Whether this is a retry after injection
      * @returns {Promise<Object|null>} - Response or null
      */
-    async sendToTutaTab(message) {
+    async sendToTutaTab(message, retry = false) {
         const tab = await this.findTutaTab();
         
         if (!tab) {
@@ -132,8 +134,56 @@ class TabService {
             logger.log('Message sent to tab', tab.id, ', response:', response);
             return response;
         } catch (error) {
+            // Check if it's a connection error (content script not loaded)
+            if (error.message?.includes('Receiving end does not exist') && !retry) {
+                logger.log('Content script not responding, attempting to inject...');
+                
+                const injected = await this._injectContentScript(tab.id);
+                if (injected) {
+                    // Wait a moment for script to initialize
+                    await new Promise(r => setTimeout(r, 500));
+                    // Retry once
+                    return this.sendToTutaTab(message, true);
+                }
+            }
+            
             logger.error('Error sending message to tab:', error);
             return null;
+        }
+    }
+
+    /**
+     * Inject content script into a tab
+     * @param {number} tabId - Tab ID to inject into
+     * @returns {Promise<boolean>} - Success status
+     */
+    async _injectContentScript(tabId) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId },
+                files: ['src/content.js']
+            });
+            
+            this._contentScriptInjected.add(tabId);
+            logger.log('Content script injected into tab:', tabId);
+            return true;
+        } catch (error) {
+            logger.error('Failed to inject content script:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Check if content script is responsive in a tab
+     * @param {number} tabId - Tab ID to check
+     * @returns {Promise<boolean>} - Whether content script responds
+     */
+    async _isContentScriptAlive(tabId) {
+        try {
+            const response = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+            return response?.pong === true;
+        } catch {
+            return false;
         }
     }
 

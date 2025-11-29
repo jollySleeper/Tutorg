@@ -7,7 +7,8 @@
     "storage",
     "activeTab",
     "notifications",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://mail.tuta.com/*",
