@@ -1,280 +1,158 @@
-// Content script for interacting with email clients
-console.log('[TutOrg] Content script loaded on:', window.location.href);
+/**
+ * TutOrg - Content Script
+ * Runs on Tuta Mail pages to interact with emails
+ */
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('[TutOrg] Received message:', request.action);
-    
-    if (request.action === 'runRules') {
-        runRulesOnPage(request.rules)
-            .then(result => {
-                console.log('[TutOrg] Rules execution result:', result);
-                sendResponse(result);
-            })
-            .catch(error => {
-                console.error('[TutOrg] Rules execution error:', error);
-                sendResponse({ success: false, message: error.message });
-            });
-        return true; // Keep message channel open for async response
-    }
-    
-    if (request.action === 'getAccountInfo') {
-        const account = detectCurrentAccount();
-        console.log('[TutOrg] Account info requested, detected:', account);
-        sendResponse({ account });
-        return true;
-    }
-});
+// ============================================
+// Constants
+// ============================================
+const LOG_PREFIX = '[TutOrg]';
 
-// Detect the current logged-in account
+const SELECTORS = {
+    emailRow: 'li.list-row',
+    subject: '[data-testid="list-row:mail:subject"]',
+    badgeLine: '.badge-line-height',
+    textEllipsis: '.text-ellipsis',
+    teamLabel: '.teamLabel',
+    checkbox: [
+        'input[type="checkbox"].list-checkbox',
+        'input[type="checkbox"].checkbox',
+        'input.checkbox.list-checkbox',
+        'input[type="checkbox"]'
+    ]
+};
+
+const BUTTON_TITLES = {
+    trash: ['Trash', 'Delete', 'Move to trash'],
+    archive: ['Archive', 'Move to archive'],
+    markRead: ['Mark as read', 'Mark read', 'Read'],
+    markUnread: ['Mark as unread', 'Mark unread', 'Unread']
+};
+
+const TIMING = {
+    actionDelay: 500,
+    quickActionDelay: 300,
+    indicatorTimeout: 4000
+};
+
+const TUTA_EMAIL_DOMAINS = [
+    'tuta.com', 'tutanota.com', 'tuta.io',
+    'keemail.me', 'tutamail.com', 'tutanota.de'
+];
+
+// ============================================
+// Logger
+// ============================================
+const log = (...args) => console.log(LOG_PREFIX, ...args);
+const logError = (...args) => console.error(LOG_PREFIX, ...args);
+const logWarn = (...args) => console.warn(LOG_PREFIX, ...args);
+const logDebug = (...args) => console.log(LOG_PREFIX, 'DEBUG -', ...args);
+
+// ============================================
+// Utility Functions
+// ============================================
+
+/**
+ * Sleep/delay utility
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Safe query selector
+ */
+const $ = (selector, context = document) => {
+    try {
+        return context.querySelector(selector);
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Safe query selector all
+ */
+const $$ = (selector, context = document) => {
+    try {
+        return context.querySelectorAll(selector);
+    } catch {
+        return [];
+    }
+};
+
+// ============================================
+// Account Detection
+// ============================================
+
+/**
+ * Detect current logged-in account
+ */
 function detectCurrentAccount() {
-    // Try multiple selectors to find the account email
+    // Try multiple selectors
     const selectors = [
-        // Account email in sidebar
         '[data-testid="account-email"]',
-        // Email address in header/navigation
         '.nav-button .text-ellipsis',
-        // Try to find email pattern in the page
         '[class*="account"] [class*="email"]',
-        // Sidebar account section
         '.folder-column .text-ellipsis'
     ];
     
     for (const selector of selectors) {
-        const elements = document.querySelectorAll(selector);
+        const elements = $$(selector);
         for (const el of elements) {
             const text = el.textContent.trim();
-            // Check if it looks like an email address
             if (text && text.includes('@') && text.includes('.')) {
-                console.log('[TutOrg] Found account email via selector:', selector, '->', text);
+                log('Found account via selector:', selector, '->', text);
                 return text;
             }
         }
     }
     
-    // Try to find email in page text that looks like account info
-    const allText = document.body.innerText;
-    const emailMatch = allText.match(/([a-zA-Z0-9._-]+@(?:tuta\.com|tutanota\.com|tuta\.io|keemail\.me|tutamail\.com|tutanota\.de))/i);
-    if (emailMatch) {
-        console.log('[TutOrg] Found account email via regex:', emailMatch[1]);
-        return emailMatch[1];
+    // Try regex match in page text
+    const emailPattern = new RegExp(
+        `([a-zA-Z0-9._-]+@(?:${TUTA_EMAIL_DOMAINS.join('|')}))`, 'i'
+    );
+    const match = document.body.innerText.match(emailPattern);
+    
+    if (match) {
+        log('Found account via regex:', match[1]);
+        return match[1];
     }
     
-    console.log('[TutOrg] Could not detect account email');
+    log('Could not detect account email');
     return null;
 }
 
-// Main function to run rules on the current page
-async function runRulesOnPage(rules) {
-    console.log('[TutOrg] Starting rule execution with', rules.length, 'rules');
-    
-    try {
-        // First, log the current page state for debugging
-        debugPageState();
-        
-        let totalProcessed = 0;
-        const results = [];
+// ============================================
+// Email Extraction
+// ============================================
 
-        for (const rule of rules) {
-            console.log('[TutOrg] Processing rule:', rule.name, rule);
-            const count = await processRule(rule);
-            totalProcessed += count;
-            results.push({ rule: rule.name, count });
-            console.log('[TutOrg] Rule result:', rule.name, '-> matched', count, 'emails');
-        }
-
-        const message = totalProcessed > 0 
-            ? `Processed ${totalProcessed} email(s) across ${results.filter(r => r.count > 0).length} rule(s)`
-            : 'No emails matched the rules';
-
-        console.log('[TutOrg] Final result:', message, results);
-        showProcessingIndicator(message);
-        
-        return { success: true, message, results };
-    } catch (error) {
-        console.error('[TutOrg] Error running rules:', error);
-        return { success: false, message: error.message };
-    }
-}
-
-// Debug function to log page state
-function debugPageState() {
-    const emailRows = document.querySelectorAll('li.list-row');
-    console.log('[TutOrg] DEBUG - Found', emailRows.length, 'email rows');
-    
-    if (emailRows.length > 0) {
-        // Log first email for debugging
-        const firstRow = emailRows[0];
-        const subject = firstRow.querySelector('[data-testid="list-row:mail:subject"]');
-        const sender = firstRow.querySelector('.text-ellipsis:not(.teamLabel):not([data-testid])');
-        
-        console.log('[TutOrg] DEBUG - First email:');
-        console.log('  Subject element:', subject);
-        console.log('  Subject text:', subject?.textContent?.trim());
-        console.log('  Sender element:', sender);
-        console.log('  Sender text:', sender?.textContent?.trim());
-    }
-    
-    // Log available selectors
-    console.log('[TutOrg] DEBUG - Available elements:');
-    console.log('  ul.list:', document.querySelectorAll('ul.list').length);
-    console.log('  li.list-row:', document.querySelectorAll('li.list-row').length);
-    console.log('  [data-testid*="mail"]:', document.querySelectorAll('[data-testid*="mail"]').length);
-    console.log('  .list-checkbox:', document.querySelectorAll('.list-checkbox').length);
-    console.log('  .checkbox.list-checkbox:', document.querySelectorAll('.checkbox.list-checkbox').length);
-}
-
-// Process a single rule
-async function processRule(rule) {
-    console.log(`[TutOrg] Processing rule: ${rule.name}`);
-    if (rule.matchType === 'sender-and-subject') {
-        console.log(`[TutOrg] Match type: ${rule.matchType}, Sender: "${rule.senderValue}", Subject: "${rule.subjectValue}"`);
-    } else {
-        console.log(`[TutOrg] Match type: ${rule.matchType}, Match value: "${rule.matchValue}"`);
-    }
-    
-    // Find matching emails
-    const matchingEmails = findMatchingEmails(rule);
-    
-    if (matchingEmails.length === 0) {
-        console.log(`[TutOrg] No emails matched rule: ${rule.name}`);
-        return 0;
-    }
-
-    console.log(`[TutOrg] Found ${matchingEmails.length} matching email(s) for rule: ${rule.name}`);
-
-    // Select the matching emails
-    selectEmails(matchingEmails);
-
-    // Wait a bit for UI to update
-    await sleep(500);
-
-    // Perform the action if not "select-only"
-    if (rule.action !== 'select-only') {
-        await performAction(rule.action, matchingEmails.length);
-    }
-
-    return matchingEmails.length;
-}
-
-// Find emails matching the rule criteria
-function findMatchingEmails(rule) {
-    const matchingElements = [];
-
-    // Get all email rows
-    const emailRows = document.querySelectorAll('li.list-row');
-    console.log(`[TutOrg] Scanning ${emailRows.length} email rows for rule: ${rule.name}`);
-
-    emailRows.forEach((row, index) => {
-        let matches = false;
-        let debugInfo = {};
-
-        switch (rule.matchType) {
-            case 'subject': {
-                const subjectDiv = row.querySelector('[data-testid="list-row:mail:subject"]');
-                const subjectText = subjectDiv?.textContent?.trim() || '';
-                debugInfo.subject = subjectText;
-                
-                if (subjectText === rule.matchValue) {
-                    matches = true;
-                    console.log(`[TutOrg] EXACT SUBJECT MATCH at row ${index}: "${subjectText}"`);
-                }
-                break;
-            }
-
-            case 'subject-contains': {
-                const subjectDiv = row.querySelector('[data-testid="list-row:mail:subject"]');
-                const subjectText = subjectDiv?.textContent?.trim() || '';
-                debugInfo.subject = subjectText;
-                
-                if (subjectText.toLowerCase().includes(rule.matchValue.toLowerCase())) {
-                    matches = true;
-                    console.log(`[TutOrg] SUBJECT CONTAINS MATCH at row ${index}: "${subjectText}" contains "${rule.matchValue}"`);
-                }
-                break;
-            }
-
-            case 'sender': {
-                // Find sender - it's in a text-ellipsis div (may or may not have .b class)
-                const senderText = extractSenderFromRow(row);
-                debugInfo.sender = senderText;
-                
-                if (senderText === rule.matchValue) {
-                    matches = true;
-                    console.log(`[TutOrg] EXACT SENDER MATCH at row ${index}: "${senderText}"`);
-                }
-                break;
-            }
-
-            case 'sender-contains': {
-                const senderText = extractSenderFromRow(row);
-                debugInfo.sender = senderText;
-                
-                if (senderText.toLowerCase().includes(rule.matchValue.toLowerCase())) {
-                    matches = true;
-                    console.log(`[TutOrg] SENDER CONTAINS MATCH at row ${index}: "${senderText}" contains "${rule.matchValue}"`);
-                }
-                break;
-            }
-
-            case 'sender-and-subject': {
-                // Complex rule: both sender AND subject must match
-                const subjectDiv = row.querySelector('[data-testid="list-row:mail:subject"]');
-                const subjectText = subjectDiv?.textContent?.trim() || '';
-                const senderText = extractSenderFromRow(row);
-                
-                debugInfo.subject = subjectText;
-                debugInfo.sender = senderText;
-                
-                const senderMatches = senderText.toLowerCase().includes((rule.senderValue || '').toLowerCase());
-                const subjectMatches = subjectText.toLowerCase().includes((rule.subjectValue || '').toLowerCase());
-                
-                if (senderMatches && subjectMatches) {
-                    matches = true;
-                    console.log(`[TutOrg] SENDER+SUBJECT MATCH at row ${index}: sender "${senderText}" contains "${rule.senderValue}" AND subject "${subjectText}" contains "${rule.subjectValue}"`);
-                }
-                break;
-            }
-        }
-
-        if (matches) {
-            matchingElements.push(row);
-        }
-        
-        // Log first few emails for debugging
-        if (index < 3) {
-            console.log(`[TutOrg] Row ${index} debug:`, debugInfo);
-        }
-    });
-
-    return matchingElements;
-}
-
-// Extract sender name/email from email row
+/**
+ * Extract sender name from email row
+ */
 function extractSenderFromRow(row) {
-    // The sender is typically in the first .text-ellipsis div that's not a teamLabel
-    // and not the subject line
-    const badgeLine = row.querySelector('.badge-line-height');
+    // Try badge line first
+    const badgeLine = $(SELECTORS.badgeLine, row);
     if (badgeLine) {
-        // Find text-ellipsis that's not teamLabel
-        const senderCandidates = badgeLine.querySelectorAll('.text-ellipsis:not(.teamLabel)');
-        for (const candidate of senderCandidates) {
+        const candidates = $$(
+            `${SELECTORS.textEllipsis}:not(${SELECTORS.teamLabel})`, 
+            badgeLine
+        );
+        
+        for (const candidate of candidates) {
             const text = candidate.textContent.trim();
-            // Sender typically comes before the date
+            // Skip dates
             if (text && !text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)/)) {
                 return text;
             }
         }
     }
     
-    // Fallback: try older selector
-    const senderElements = row.querySelectorAll('.text-ellipsis');
-    for (const elem of senderElements) {
+    // Fallback to text-ellipsis elements
+    const elements = $$(SELECTORS.textEllipsis, row);
+    for (const elem of elements) {
         const text = elem.textContent.trim();
-        // Skip if it's a date or looks like subject
         if (text && 
             !text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d)/) &&
-            !elem.closest('[data-testid="list-row:mail:subject"]')) {
+            !elem.closest(SELECTORS.subject)) {
             return text;
         }
     }
@@ -282,148 +160,263 @@ function extractSenderFromRow(row) {
     return '';
 }
 
-// Select emails by checking their checkboxes
-function selectEmails(emailRows) {
-    console.log(`[TutOrg] Selecting ${emailRows.length} emails`);
+/**
+ * Extract subject from email row
+ */
+function extractSubjectFromRow(row) {
+    const subjectEl = $(SELECTORS.subject, row);
+    return subjectEl?.textContent?.trim() || '';
+}
+
+// ============================================
+// Rule Matching
+// ============================================
+
+/**
+ * Check if email row matches a rule
+ */
+function matchesRule(row, rule) {
+    const sender = extractSenderFromRow(row);
+    const subject = extractSubjectFromRow(row);
     
-    emailRows.forEach((row, index) => {
-        // Try multiple checkbox selectors
-        const checkbox = row.querySelector('input[type="checkbox"].list-checkbox') ||
-                         row.querySelector('input[type="checkbox"].checkbox') ||
-                         row.querySelector('input.checkbox.list-checkbox') ||
-                         row.querySelector('input[type="checkbox"]');
-        
-        if (checkbox) {
-            if (!checkbox.checked) {
-                console.log(`[TutOrg] Checking checkbox for row ${index}`);
-                
-                // Method 1: Direct click
-                checkbox.click();
-                
-                // Method 2: Dispatch events if click didn't work
-                if (!checkbox.checked) {
-                    checkbox.checked = true;
-                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                    checkbox.dispatchEvent(new Event('input', { bubbles: true }));
-                    checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                }
-            } else {
-                console.log(`[TutOrg] Checkbox already checked for row ${index}`);
-            }
-        } else {
-            console.warn(`[TutOrg] No checkbox found for row ${index}`);
+    switch (rule.matchType) {
+        case 'subject':
+            return subject === rule.matchValue;
+            
+        case 'subject-contains':
+            return subject.toLowerCase().includes(rule.matchValue.toLowerCase());
+            
+        case 'sender':
+            return sender === rule.matchValue;
+            
+        case 'sender-contains':
+            return sender.toLowerCase().includes(rule.matchValue.toLowerCase());
+            
+        case 'sender-and-subject': {
+            const senderMatch = sender.toLowerCase().includes(
+                (rule.senderValue || '').toLowerCase()
+            );
+            const subjectMatch = subject.toLowerCase().includes(
+                (rule.subjectValue || '').toLowerCase()
+            );
+            return senderMatch && subjectMatch;
         }
+            
+        default:
+            return false;
+    }
+}
+
+/**
+ * Find all emails matching a rule
+ */
+function findMatchingEmails(rule) {
+    const rows = $$(SELECTORS.emailRow);
+    const matches = [];
+    
+    log(`Scanning ${rows.length} emails for rule: ${rule.name}`);
+    
+    rows.forEach((row, index) => {
+        if (matchesRule(row, rule)) {
+            matches.push(row);
+            log(`Match found at row ${index}`);
+        }
+    });
+    
+    return matches;
+}
+
+// ============================================
+// Email Selection
+// ============================================
+
+/**
+ * Select emails by checking their checkboxes
+ */
+function selectEmails(rows) {
+    log(`Selecting ${rows.length} emails`);
+    
+    rows.forEach((row, index) => {
+        // Try multiple checkbox selectors
+        let checkbox = null;
+        for (const selector of SELECTORS.checkbox) {
+            checkbox = $(selector, row);
+            if (checkbox) break;
+        }
+        
+        if (!checkbox) {
+            logWarn(`No checkbox found for row ${index}`);
+            return;
+        }
+        
+        if (checkbox.checked) {
+            log(`Row ${index} already selected`);
+            return;
+        }
+        
+        // Try direct click first
+        checkbox.click();
+        
+        // Fallback to event dispatch if needed
+        if (!checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            checkbox.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        
+        log(`Selected row ${index}`);
     });
 }
 
-// Perform the specified action on selected emails
-async function performAction(action, count) {
-    console.log(`[TutOrg] Performing action: ${action} on ${count} email(s)`);
+// ============================================
+// Actions
+// ============================================
 
-    switch (action) {
-        case 'trash': {
-            const trashButton = findButtonByTitle(['Trash', 'Delete', 'Move to trash']);
-            if (trashButton) {
-                console.log('[TutOrg] Found trash button, clicking...');
-                trashButton.click();
-                await sleep(500);
-            } else {
-                console.warn('[TutOrg] Trash button not found, trying keyboard shortcut');
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
-            }
-            break;
-        }
-
-        case 'archive': {
-            const archiveButton = findButtonByTitle(['Archive', 'Move to archive']);
-            if (archiveButton) {
-                console.log('[TutOrg] Found archive button, clicking...');
-                archiveButton.click();
-                await sleep(500);
-            } else {
-                console.warn('[TutOrg] Archive button not found, trying keyboard shortcut');
-                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-                document.dispatchEvent(new KeyboardEvent('keydown', { 
-                    key: 'e', 
-                    [isMac ? 'metaKey' : 'ctrlKey']: true,
-                    bubbles: true 
-                }));
-            }
-            break;
-        }
-
-        case 'mark-read': {
-            const markReadButton = findButtonByTitle(['Mark as read', 'Mark read', 'Read']);
-            if (markReadButton) {
-                console.log('[TutOrg] Found mark-read button, clicking...');
-                markReadButton.click();
-                await sleep(300);
-            } else {
-                console.warn('[TutOrg] Mark-read button not found');
-            }
-            break;
-        }
-
-        case 'mark-unread': {
-            const markUnreadButton = findButtonByTitle(['Mark as unread', 'Mark unread', 'Unread']);
-            if (markUnreadButton) {
-                console.log('[TutOrg] Found mark-unread button, clicking...');
-                markUnreadButton.click();
-                await sleep(300);
-            } else {
-                console.warn('[TutOrg] Mark-unread button not found');
-            }
-            break;
-        }
-    }
-}
-
-// Find button by title or aria-label
-function findButtonByTitle(titles) {
-    console.log('[TutOrg] Looking for button with titles:', titles);
-    
+/**
+ * Find a button by title/aria-label
+ */
+function findButton(titles) {
     for (const title of titles) {
-        // Try title attribute
-        let button = document.querySelector(`button[title="${title}"]`);
-        if (button) {
-            console.log(`[TutOrg] Found button by title: "${title}"`);
-            return button;
-        }
-
-        // Try aria-label
-        button = document.querySelector(`button[aria-label="${title}"]`);
-        if (button) {
-            console.log(`[TutOrg] Found button by aria-label: "${title}"`);
-            return button;
-        }
-
-        // Try case-insensitive search
-        const allButtons = document.querySelectorAll('button');
-        for (const btn of allButtons) {
-            const btnTitle = btn.getAttribute('title') || btn.getAttribute('aria-label') || '';
-            if (btnTitle.toLowerCase().includes(title.toLowerCase())) {
-                console.log(`[TutOrg] Found button by partial match: "${btnTitle}"`);
-                return btn;
+        // Exact match
+        let btn = $(`button[title="${title}"]`) || 
+                  $(`button[aria-label="${title}"]`);
+        if (btn) return btn;
+        
+        // Partial match
+        const allButtons = $$('button');
+        for (const b of allButtons) {
+            const t = b.getAttribute('title') || b.getAttribute('aria-label') || '';
+            if (t.toLowerCase().includes(title.toLowerCase())) {
+                return b;
             }
         }
     }
     
-    console.warn('[TutOrg] No button found for titles:', titles);
+    logWarn('Button not found for:', titles);
     return null;
 }
 
-// Helper function to sleep
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * Perform action on selected emails
+ */
+async function performAction(action, count) {
+    log(`Performing action: ${action} on ${count} email(s)`);
+    
+    const actions = {
+        trash: async () => {
+            const btn = findButton(BUTTON_TITLES.trash);
+            if (btn) {
+                btn.click();
+                await sleep(TIMING.actionDelay);
+            }
+        },
+        archive: async () => {
+            const btn = findButton(BUTTON_TITLES.archive);
+            if (btn) {
+                btn.click();
+                await sleep(TIMING.actionDelay);
+            }
+        },
+        'mark-read': async () => {
+            const btn = findButton(BUTTON_TITLES.markRead);
+            if (btn) {
+                btn.click();
+                await sleep(TIMING.quickActionDelay);
+            }
+        },
+        'mark-unread': async () => {
+            const btn = findButton(BUTTON_TITLES.markUnread);
+            if (btn) {
+                btn.click();
+                await sleep(TIMING.quickActionDelay);
+            }
+        }
+    };
+    
+    const actionFn = actions[action];
+    if (actionFn) {
+        await actionFn();
+    }
 }
 
-// Add a visual indicator when rules are being processed
-function showProcessingIndicator(message) {
-    const existingIndicator = document.getElementById('tuta-organizer-indicator');
+// ============================================
+// Rule Processing
+// ============================================
+
+/**
+ * Process a single rule
+ */
+async function processRule(rule) {
+    log(`Processing rule: ${rule.name}`);
+    
+    if (rule.matchType === 'sender-and-subject') {
+        log(`  Sender: "${rule.senderValue}", Subject: "${rule.subjectValue}"`);
+    } else {
+        log(`  Match: "${rule.matchValue}"`);
+    }
+    
+    const matches = findMatchingEmails(rule);
+    
+    if (matches.length === 0) {
+        log(`  No matches found`);
+        return 0;
+    }
+    
+    log(`  Found ${matches.length} match(es)`);
+    
+    selectEmails(matches);
+    await sleep(TIMING.actionDelay);
+    
+    if (rule.action !== 'select-only') {
+        await performAction(rule.action, matches.length);
+    }
+    
+    return matches.length;
+}
+
+/**
+ * Run all rules on the page
+ */
+async function runRulesOnPage(rules) {
+    log(`Starting rule execution with ${rules.length} rules`);
+    
+    try {
+        let totalProcessed = 0;
+        const results = [];
+        
+        for (const rule of rules) {
+            const count = await processRule(rule);
+            totalProcessed += count;
+            results.push({ rule: rule.name, count });
+        }
+        
+        const message = totalProcessed > 0
+            ? `Processed ${totalProcessed} email(s) across ${results.filter(r => r.count > 0).length} rule(s)`
+            : 'No emails matched the rules';
+        
+        log('Final result:', message);
+        showIndicator(message);
+        
+        return { success: true, message, results };
+    } catch (error) {
+        logError('Error running rules:', error);
+        return { success: false, message: error.message };
+    }
+}
+
+// ============================================
+// Visual Indicator
+// ============================================
+
+/**
+ * Show processing result indicator
+ */
+function showIndicator(message) {
+    const existingIndicator = $('#tuta-organizer-indicator');
     if (existingIndicator) {
         existingIndicator.remove();
     }
-
+    
     const indicator = document.createElement('div');
     indicator.id = 'tuta-organizer-indicator';
     indicator.style.cssText = `
@@ -440,16 +433,65 @@ function showProcessingIndicator(message) {
         font-size: 14px;
         font-weight: 500;
         max-width: 300px;
+        animation: tutorg-slide-in 0.3s ease;
     `;
     indicator.textContent = '📧 ' + message;
+    
+    // Add animation keyframes
+    if (!$('#tutorg-styles')) {
+        const style = document.createElement('style');
+        style.id = 'tutorg-styles';
+        style.textContent = `
+            @keyframes tutorg-slide-in {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
     document.body.appendChild(indicator);
-
+    
     setTimeout(() => {
         if (indicator.parentNode) {
-            indicator.remove();
+            indicator.style.animation = 'tutorg-slide-in 0.3s ease reverse';
+            setTimeout(() => indicator.remove(), 300);
         }
-    }, 4000);
+    }, TIMING.indicatorTimeout);
 }
 
-// Initial debug log
-console.log('[TutOrg] Content script ready. Page:', document.title);
+// ============================================
+// Message Handling
+// ============================================
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    log('Received message:', request.action);
+    
+    switch (request.action) {
+        case 'runRules':
+            runRulesOnPage(request.rules)
+                .then(sendResponse)
+                .catch(error => {
+                    logError('Rules execution error:', error);
+                    sendResponse({ success: false, message: error.message });
+                });
+            return true; // Keep channel open for async
+            
+        case 'getAccountInfo':
+            const account = detectCurrentAccount();
+            log('Account info requested:', account);
+            sendResponse({ account });
+            return true;
+            
+        case 'ping':
+            sendResponse({ pong: true });
+            return true;
+    }
+});
+
+// ============================================
+// Initialization
+// ============================================
+
+log('Content script loaded on:', window.location.href);
+log('Page title:', document.title);
