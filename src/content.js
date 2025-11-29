@@ -130,31 +130,72 @@ function detectCurrentAccount() {
 }
 
 // ============================================
-// Folder Detection
+// Folder Detection (via Move button dropdown)
 // ============================================
-function detectFolders() {
+
+/**
+ * Fetch folders by opening the Move dropdown
+ * This simulates clicking Move to reveal all available folders
+ */
+async function fetchFoldersFromDropdown() {
+    log('Fetching folders from Move dropdown...');
+    
+    // Find the Move button in action bar
+    const moveBtn = $('button[data-testid="btn:move_action"]') ||
+                    findButton(['Move']);
+    
+    if (!moveBtn) {
+        logWarn('Move button not found - cannot fetch folders');
+        return [];
+    }
+    
+    // Click to open dropdown
+    moveBtn.click();
+    await sleep(300);
+    
+    // Wait for dropdown to appear
+    let dropdown = null;
+    for (let i = 0; i < 10; i++) {
+        dropdown = $('[data-testid="dropdown:menu"]');
+        if (dropdown) break;
+        await sleep(100);
+    }
+    
+    if (!dropdown) {
+        logWarn('Folder dropdown did not appear');
+        return [];
+    }
+    
+    // Parse all folder buttons from dropdown
     const folders = [];
+    const folderButtons = $$('button[data-testid^="btn:dropdown-folder:"]', dropdown);
     
-    // Look for folder buttons in sidebar
-    const folderButtons = $$('button[data-testid^="btn:folder:"]');
     folderButtons.forEach(btn => {
-        const name = btn.textContent?.trim();
-        if (name) {
-            folders.push({ name, element: btn });
+        const testId = btn.getAttribute('data-testid') || '';
+        const folderName = testId.replace('btn:dropdown-folder:', '');
+        const displayText = btn.textContent?.trim() || folderName;
+        
+        if (folderName) {
+            folders.push({
+                name: folderName,
+                displayName: displayText.replace(/^\.\s*/, ''), // Remove leading ". " for nested
+                testId: testId
+            });
         }
     });
     
-    // Also check navigation items
-    const navItems = $$('.folder-column button, .nav-button');
-    navItems.forEach(item => {
-        const text = item.textContent?.trim();
-        if (text && !folders.find(f => f.name === text)) {
-            const title = item.getAttribute('title') || '';
-            if (title.includes('folder') || title.includes('layers deep')) {
-                folders.push({ name: text });
-            }
-        }
-    });
+    log(`Found ${folders.length} folders:`, folders.map(f => f.name));
+    
+    // Close the dropdown by pressing Escape or clicking elsewhere
+    document.body.click();
+    await sleep(100);
+    
+    // Double-check dropdown is closed
+    const stillOpen = $('[data-testid="dropdown:menu"]');
+    if (stillOpen) {
+        const closeBtn = $('button[data-testid="btn:close_alt"]');
+        if (closeBtn) closeBtn.click();
+    }
     
     return folders;
 }
@@ -518,7 +559,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
             
         case 'getFolders':
-            sendResponse({ folders: detectFolders() });
+            fetchFoldersFromDropdown()
+                .then(folders => sendResponse({ folders }))
+                .catch(error => sendResponse({ folders: [], error: error.message }));
             return true;
             
         case 'ping':
