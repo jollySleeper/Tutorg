@@ -177,7 +177,7 @@ class RulesManager {
                 </div>
                 <div class="rule-details">
                     ${ui.formatRuleMatch(rule)}
-                    <span class="rule-action">→ ${ui.formatAction(rule.action)}</span>
+                    <span class="rule-action">→ ${ui.formatAction(rule.action, rule)}</span>
                 </div>
             </div>
         `;

@@ -166,30 +166,70 @@ class UIService {
     /**
      * Format action for display
      * @param {string} action - Action key
+     * @param {Object} rule - Optional rule object for extra info
      * @returns {string} - Display name
      */
-    formatAction(action) {
+    formatAction(action, rule = {}) {
+        if (action === 'move-to-folder' && rule.targetFolder) {
+            return `📁 ${rule.targetFolder}`;
+        }
         return ACTION_TYPES[action] || action;
     }
 
     /**
-     * Format rule match for display (handles complex rules)
+     * Count comma-separated values
+     * @param {string} value - Comma-separated string
+     * @returns {number} - Number of values
+     */
+    _countValues(value) {
+        if (!value) return 0;
+        return value.split(',').map(v => v.trim()).filter(v => v).length;
+    }
+
+    /**
+     * Truncate text with ellipsis
+     * @param {string} text - Text to truncate
+     * @param {number} maxLen - Max length
+     * @returns {string} - Truncated text
+     */
+    _truncate(text, maxLen = 20) {
+        if (!text || text.length <= maxLen) return text;
+        return text.substring(0, maxLen) + '...';
+    }
+
+    /**
+     * Format rule match for display (handles complex rules and multi-values)
      * @param {Object} rule - Rule object
      * @returns {string} - HTML string
      */
     formatRuleMatch(rule) {
         if (rule.matchType === 'sender-and-subject') {
+            const senderCount = this._countValues(rule.senderValue);
+            const subjectCount = this._countValues(rule.subjectValue);
+            
             return `
-                <span class="rule-match rule-match-complex">
-                    Sender: ${escapeHtml(rule.senderValue || '')}
+                <span class="rule-match rule-match-complex" title="${escapeHtml(rule.senderValue || '')}">
+                    Sender: ${this._truncate(escapeHtml(rule.senderValue || ''))}
+                    ${senderCount > 1 ? `<span class="rule-match-count">${senderCount}</span>` : ''}
                 </span>
                 <span class="rule-match-and">AND</span>
-                <span class="rule-match rule-match-complex">
-                    Subject: ${escapeHtml(rule.subjectValue || '')}
+                <span class="rule-match rule-match-complex" title="${escapeHtml(rule.subjectValue || '')}">
+                    Subject: ${this._truncate(escapeHtml(rule.subjectValue || ''))}
+                    ${subjectCount > 1 ? `<span class="rule-match-count">${subjectCount}</span>` : ''}
                 </span>
             `;
         }
-        return `<span class="rule-match">${this.formatMatchType(rule.matchType)}: ${escapeHtml(rule.matchValue)}</span>`;
+        
+        const valueCount = this._countValues(rule.matchValue);
+        const displayValue = this._truncate(escapeHtml(rule.matchValue));
+        const fullValue = escapeHtml(rule.matchValue);
+        
+        return `
+            <span class="rule-match" title="${fullValue}">
+                ${this.formatMatchType(rule.matchType)}: ${displayValue}
+                ${valueCount > 1 ? `<span class="rule-match-count">${valueCount}</span>` : ''}
+            </span>
+        `;
     }
 
     /**

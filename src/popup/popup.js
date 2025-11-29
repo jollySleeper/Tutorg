@@ -1,6 +1,6 @@
 /**
  * TutOrg - Popup Main Controller
- * Orchestrates all popup functionality
+ * Orchestrates all popup functionality with modal-based UI
  */
 
 import { logger, $ } from '../lib/utils.js';
@@ -13,7 +13,7 @@ import { rulesManager } from './rules.js';
  */
 const ACCOUNT_DETECTION = {
     MAX_RETRIES: 3,
-    INITIAL_DELAY: 500,  // ms
+    INITIAL_DELAY: 500,
     BACKOFF_MULTIPLIER: 1.5
 };
 
@@ -25,6 +25,7 @@ class PopupController {
         this._boundHandlers = {};
         this._currentAccount = 'default';
         this._isDetectingAccount = false;
+        this._availableFolders = [];
     }
 
     /**
@@ -33,21 +34,20 @@ class PopupController {
     async init() {
         logger.log('Initializing popup...');
         
-        // Check if in window mode and hide the open window button
+        // Check if in window mode
         if (tabs.isWindowMode()) {
             const openWindowBtn = $('#openWindow');
             if (openWindowBtn) {
                 openWindowBtn.style.display = 'none';
             }
             document.body.classList.add('window-mode');
-            logger.log('Running in window mode');
         }
         
-        // Setup event listeners first (so retry button works)
+        // Setup event listeners
         this._setupEventListeners();
         this._setupTooltips();
         
-        // Detect account with auto-retry
+        // Detect account
         this._currentAccount = await this._detectAccountWithRetry();
         
         // Initialize rules manager
@@ -57,12 +57,14 @@ class PopupController {
         ui.updateAccountDisplay(this._currentAccount);
         rulesManager.renderRules();
         
+        // Load available folders in background
+        this._loadFolders();
+        
         logger.log('Popup initialized, account:', this._currentAccount);
     }
 
     /**
-     * Detect account with auto-retry and exponential backoff
-     * @returns {Promise<string>} - Account identifier
+     * Detect account with auto-retry
      */
     async _detectAccountWithRetry() {
         this._setAccountDetecting(true);
@@ -79,7 +81,6 @@ class PopupController {
                 return account;
             }
             
-            // Wait before retry (except on last attempt)
             if (attempt < ACCOUNT_DETECTION.MAX_RETRIES) {
                 await this._sleep(delay);
                 delay *= ACCOUNT_DETECTION.BACKOFF_MULTIPLIER;
@@ -87,13 +88,11 @@ class PopupController {
         }
         
         this._setAccountDetecting(false);
-        logger.log('Account detection failed after retries, using default');
         return 'default';
     }
 
     /**
      * Single attempt to detect account
-     * @returns {Promise<string>} - Account identifier
      */
     async _detectAccount() {
         try {
@@ -111,30 +110,25 @@ class PopupController {
      * Manual retry account detection
      */
     async _retryAccountDetection() {
-        if (this._isDetectingAccount) {
-            logger.log('Account detection already in progress');
-            return;
-        }
+        if (this._isDetectingAccount) return;
         
-        ui.showStatus('Reconnecting to Tuta Mail...', 'success');
+        ui.showStatus('Reconnecting...', 'success');
         
         this._currentAccount = await this._detectAccountWithRetry();
         ui.updateAccountDisplay(this._currentAccount);
         
-        // Re-initialize rules for new account
         await rulesManager.init(this._currentAccount);
         rulesManager.renderRules();
         
         if (this._currentAccount !== 'default') {
             ui.showStatus('✓ Connected to ' + this._currentAccount, 'success');
         } else {
-            ui.showStatus('Could not detect account. Is Tuta Mail open?', 'error');
+            ui.showStatus('Could not detect account', 'error');
         }
     }
 
     /**
-     * Update UI to show detection state
-     * @param {boolean} detecting - Whether detection is in progress
+     * Update account detection UI state
      */
     _setAccountDetecting(detecting) {
         this._isDetectingAccount = detecting;
@@ -151,21 +145,50 @@ class PopupController {
     }
 
     /**
-     * Sleep utility
-     * @param {number} ms - Milliseconds to sleep
+     * Load available folders from Tuta
      */
+    async _loadFolders() {
+        try {
+            const response = await tabs.sendToTutaTab({ action: 'getFolders' });
+            if (response?.folders) {
+                this._availableFolders = response.folders;
+                this._populateFolderSelect();
+            }
+        } catch (error) {
+            logger.log('Could not load folders:', error.message);
+        }
+    }
+
+    /**
+     * Populate folder select dropdown
+     */
+    _populateFolderSelect() {
+        const select = $('#targetFolder');
+        if (!select) return;
+        
+        select.innerHTML = '<option value="">Select folder...</option>';
+        
+        this._availableFolders.forEach(folder => {
+            const option = document.createElement('option');
+            option.value = folder.name;
+            option.textContent = folder.name;
+            select.appendChild(option);
+        });
+    }
+
     _sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**
-     * Setup all event listeners
+     * Setup event listeners
      */
     _setupEventListeners() {
-        // Button clicks
-        this._addClickHandler('addRule', () => this._showAddForm());
+        // Main buttons
+        this._addClickHandler('addRule', () => this._showModal());
         this._addClickHandler('saveRule', () => this._saveRule());
-        this._addClickHandler('cancelRule', () => this._hideForm());
+        this._addClickHandler('cancelRule', () => this._hideModal());
+        this._addClickHandler('closeModal', () => this._hideModal());
         this._addClickHandler('runRules', () => this._runRules());
         this._addClickHandler('refreshPage', () => this._refreshPage());
         this._addClickHandler('openWindow', () => this._openInWindow());
@@ -173,116 +196,145 @@ class PopupController {
         this._addClickHandler('exportRules', () => this._exportRules());
         this._addClickHandler('importRules', () => this._triggerImport());
 
-        // Match type change
+        // Match type change - show/hide complex fields
         const matchType = $('#matchType');
         if (matchType) {
             matchType.addEventListener('change', () => this._updateMatchTypeHelp());
         }
 
-        // Rule list actions (event delegation)
+        // Action change - show/hide folder selector
+        const actionSelect = $('#action');
+        if (actionSelect) {
+            actionSelect.addEventListener('change', () => this._updateActionFields());
+        }
+
+        // Rule list actions (delegation)
         const rulesList = $('#rulesList');
         if (rulesList) {
             rulesList.addEventListener('click', (e) => this._handleRuleAction(e));
         }
 
-        // File import handler
+        // File import
         const importInput = $('#importFileInput');
         if (importInput) {
             importInput.addEventListener('change', (e) => this._handleImportFile(e));
         }
+
+        // Modal overlay click to close
+        const modal = $('#ruleModal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this._hideModal();
+                }
+            });
+        }
+
+        // Escape key to close modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this._hideModal();
+            }
+        });
     }
 
     /**
-     * Setup custom tooltips
+     * Setup tooltips
      */
     _setupTooltips() {
-        // Run Rules button tooltip
-        const runRulesBtn = $('#runRules');
-        if (runRulesBtn) {
-            ui.setupTooltip(runRulesBtn, 'Run all enabled rules on visible emails');
-        }
+        const tooltips = {
+            'runRules': 'Run all enabled rules on visible emails',
+            'refreshPage': '⚠️ Warning: Refreshing may log you out',
+            'openWindow': 'Open in a separate window',
+            'retryAccount': 'Retry connecting to Tuta Mail',
+            'importRules': 'Import rules from JSON file',
+            'exportRules': 'Export rules to JSON file'
+        };
 
-        // Refresh Page button tooltip with warning
-        const refreshBtn = $('#refreshPage');
-        if (refreshBtn) {
-            ui.setupTooltip(refreshBtn, '⚠️ Warning: Refreshing may log you out of Tuta Mail');
-        }
-
-        // Open Window button tooltip
-        const openWindowBtn = $('#openWindow');
-        if (openWindowBtn) {
-            ui.setupTooltip(openWindowBtn, 'Open in a separate window');
-        }
-
-        // Retry Account button tooltip
-        const retryBtn = $('#retryAccount');
-        if (retryBtn) {
-            ui.setupTooltip(retryBtn, 'Retry connecting to Tuta Mail tab');
-        }
-
-        // Import/Export tooltips
-        const importBtn = $('#importRules');
-        if (importBtn) {
-            ui.setupTooltip(importBtn, 'Import rules from a JSON file');
-        }
-
-        const exportBtn = $('#exportRules');
-        if (exportBtn) {
-            ui.setupTooltip(exportBtn, 'Export rules to a JSON file for backup');
-        }
+        Object.entries(tooltips).forEach(([id, text]) => {
+            const el = $(`#${id}`);
+            if (el) ui.setupTooltip(el, text);
+        });
     }
 
     /**
-     * Add click handler to element
-     * @param {string} id - Element ID
-     * @param {Function} handler - Click handler
+     * Add click handler
      */
     _addClickHandler(id, handler) {
         const element = $(`#${id}`);
         if (element) {
-            this._boundHandlers[id] = handler;
             element.addEventListener('click', handler);
         }
     }
 
     /**
-     * Show add rule form
+     * Show add/edit modal
      */
-    _showAddForm() {
+    _showModal(editRule = null) {
         rulesManager.stopEditing();
-        ui.setText('formTitle', 'Add New Rule');
-        ui.setText('saveRule', 'Save Rule');
-        ui.toggleElement('addRuleForm', true);
-        ui.setButtonEnabled('addRule', false);
-        this._clearForm();
+        
+        if (editRule) {
+            ui.setText('formTitle', 'Edit Rule');
+            ui.setText('saveRule', 'Update Rule');
+            rulesManager.startEditing(editRule.id);
+            this._populateForm(editRule);
+        } else {
+            ui.setText('formTitle', 'Add New Rule');
+            ui.setText('saveRule', 'Save Rule');
+            this._clearForm();
+        }
+        
         this._updateMatchTypeHelp();
+        this._updateActionFields();
+        ui.toggleElement('ruleModal', true);
     }
 
     /**
-     * Hide rule form
+     * Hide modal
      */
-    _hideForm() {
-        ui.toggleElement('addRuleForm', false);
-        ui.setButtonEnabled('addRule', true);
+    _hideModal() {
+        ui.toggleElement('ruleModal', false);
         rulesManager.stopEditing();
         this._clearForm();
     }
 
     /**
-     * Clear form fields
+     * Clear form
      */
     _clearForm() {
         ui.setFieldValue('ruleName', '');
-        ui.setFieldValue('matchType', 'subject');
+        ui.setFieldValue('matchType', 'subject-contains');
         ui.setFieldValue('matchValue', '');
         ui.setFieldValue('senderValue', '');
         ui.setFieldValue('subjectValue', '');
         ui.setFieldValue('action', 'trash');
+        ui.setFieldValue('targetFolder', '');
         ui.setCheckboxValue('enabled', true);
     }
 
     /**
-     * Update match type help text and form visibility
+     * Populate form with rule data
+     */
+    _populateForm(rule) {
+        ui.setFieldValue('ruleName', rule.name);
+        ui.setFieldValue('matchType', rule.matchType);
+        ui.setFieldValue('action', rule.action);
+        ui.setCheckboxValue('enabled', rule.enabled);
+        
+        if (rule.targetFolder) {
+            ui.setFieldValue('targetFolder', rule.targetFolder);
+        }
+
+        if (rule.matchType === 'sender-and-subject') {
+            ui.setFieldValue('senderValue', rule.senderValue || '');
+            ui.setFieldValue('subjectValue', rule.subjectValue || '');
+        } else {
+            ui.setFieldValue('matchValue', rule.matchValue || '');
+        }
+    }
+
+    /**
+     * Update match type help and visibility
      */
     _updateMatchTypeHelp() {
         const matchType = ui.getFieldValue('matchType');
@@ -295,24 +347,48 @@ class PopupController {
     }
 
     /**
-     * Save or update rule
+     * Update action-specific fields
+     */
+    _updateActionFields() {
+        const action = ui.getFieldValue('action');
+        const isMoveToFolder = action === 'move-to-folder';
+        
+        ui.toggleElement('folderSelectGroup', isMoveToFolder);
+        
+        // Reload folders if needed
+        if (isMoveToFolder && this._availableFolders.length === 0) {
+            this._loadFolders();
+        }
+    }
+
+    /**
+     * Save rule
      */
     async _saveRule() {
         const matchType = ui.getFieldValue('matchType');
         const isComplex = ui.isComplexMatchType(matchType);
+        const action = ui.getFieldValue('action');
 
         const ruleData = {
             name: ui.getFieldValue('ruleName'),
             matchType,
-            action: ui.getFieldValue('action'),
+            action,
             enabled: ui.getCheckboxValue('enabled')
         };
 
-        // Get appropriate match values
+        // Handle move-to-folder
+        if (action === 'move-to-folder') {
+            ruleData.targetFolder = ui.getFieldValue('targetFolder');
+            if (!ruleData.targetFolder) {
+                ui.showStatus('Please select a target folder', 'error');
+                return;
+            }
+        }
+
+        // Handle match values
         if (isComplex) {
             ruleData.senderValue = ui.getFieldValue('senderValue');
             ruleData.subjectValue = ui.getFieldValue('subjectValue');
-            ruleData.matchValue = '';
 
             if (!ruleData.name || !ruleData.senderValue || !ruleData.subjectValue) {
                 ui.showStatus('Please fill in all required fields', 'error');
@@ -320,8 +396,6 @@ class PopupController {
             }
         } else {
             ruleData.matchValue = ui.getFieldValue('matchValue');
-            ruleData.senderValue = '';
-            ruleData.subjectValue = '';
 
             if (!ruleData.name || !ruleData.matchValue) {
                 ui.showStatus('Please fill in all required fields', 'error');
@@ -332,22 +406,21 @@ class PopupController {
         try {
             if (rulesManager.isEditing()) {
                 await rulesManager.updateRule(rulesManager.editingRuleId, ruleData);
-                ui.showStatus('Rule updated successfully!', 'success');
+                ui.showStatus('Rule updated!', 'success');
             } else {
                 await rulesManager.addRule(ruleData);
-                ui.showStatus('Rule added successfully!', 'success');
+                ui.showStatus('Rule added!', 'success');
             }
 
             rulesManager.renderRules();
-            this._hideForm();
+            this._hideModal();
         } catch (error) {
-            ui.showStatus('Error saving rule: ' + error.message, 'error');
+            ui.showStatus('Error: ' + error.message, 'error');
         }
     }
 
     /**
-     * Handle rule action click (edit, toggle, delete)
-     * @param {Event} event - Click event
+     * Handle rule action click
      */
     async _handleRuleAction(event) {
         const button = event.target.closest('button');
@@ -359,8 +432,6 @@ class PopupController {
         const ruleId = ruleItem.dataset.ruleId;
         const action = button.dataset.action;
 
-        logger.log('Rule action:', action, 'for rule:', ruleId);
-
         switch (action) {
             case 'toggle':
                 await this._toggleRule(ruleId);
@@ -369,15 +440,12 @@ class PopupController {
                 await this._deleteRule(ruleId);
                 break;
             case 'edit':
-                this._editRule(ruleId);
+                const rule = rulesManager.getRule(ruleId);
+                if (rule) this._showModal(rule);
                 break;
         }
     }
 
-    /**
-     * Toggle rule enabled state
-     * @param {string} ruleId - Rule ID
-     */
     async _toggleRule(ruleId) {
         const newState = await rulesManager.toggleRule(ruleId);
         if (newState !== null) {
@@ -386,73 +454,28 @@ class PopupController {
         }
     }
 
-    /**
-     * Delete a rule
-     * @param {string} ruleId - Rule ID
-     */
     async _deleteRule(ruleId) {
         const rule = rulesManager.getRule(ruleId);
-        const confirmed = confirm(`Are you sure you want to delete the rule "${rule?.name || ruleId}"?`);
-        
-        if (!confirmed) return;
+        if (!confirm(`Delete rule "${rule?.name}"?`)) return;
 
-        const success = await rulesManager.deleteRule(ruleId);
-        if (success) {
+        if (await rulesManager.deleteRule(ruleId)) {
             rulesManager.renderRules();
             ui.showStatus('Rule deleted', 'success');
         }
     }
 
     /**
-     * Edit a rule
-     * @param {string} ruleId - Rule ID
-     */
-    _editRule(ruleId) {
-        const rule = rulesManager.getRule(ruleId);
-        if (!rule) {
-            logger.error('Rule not found:', ruleId);
-            return;
-        }
-
-        rulesManager.startEditing(ruleId);
-        
-        ui.setText('formTitle', 'Edit Rule');
-        ui.setText('saveRule', 'Update Rule');
-
-        // Populate form
-        ui.setFieldValue('ruleName', rule.name);
-        ui.setFieldValue('matchType', rule.matchType);
-        ui.setFieldValue('action', rule.action);
-        ui.setCheckboxValue('enabled', rule.enabled);
-
-        if (rule.matchType === 'sender-and-subject') {
-            ui.setFieldValue('senderValue', rule.senderValue || '');
-            ui.setFieldValue('subjectValue', rule.subjectValue || '');
-            ui.setFieldValue('matchValue', '');
-        } else {
-            ui.setFieldValue('matchValue', rule.matchValue || '');
-            ui.setFieldValue('senderValue', '');
-            ui.setFieldValue('subjectValue', '');
-        }
-
-        ui.toggleElement('addRuleForm', true);
-        ui.setButtonEnabled('addRule', false);
-        this._updateMatchTypeHelp();
-    }
-
-    /**
-     * Run rules on Tuta tab
+     * Run rules
      */
     async _runRules() {
         const enabledRules = rulesManager.getEnabledRules();
 
         if (enabledRules.length === 0) {
-            ui.showStatus('No enabled rules to run', 'error');
+            ui.showStatus('No enabled rules', 'error');
             return;
         }
 
-        ui.showStatus('Running rules...', 'success');
-        logger.log('Running', enabledRules.length, 'enabled rules');
+        ui.showStatus('Running...', 'success');
 
         try {
             const response = await tabs.sendToTutaTab({
@@ -462,46 +485,26 @@ class PopupController {
 
             if (response?.success) {
                 ui.showStatus(`✓ ${response.message}`, 'success');
-            } else if (response) {
-                ui.showStatus(response.message || 'Failed to run rules', 'error');
             } else {
-                ui.showStatus('No Tuta Mail tab found. Please open Tuta Mail.', 'error');
+                ui.showStatus(response?.message || 'Failed', 'error');
             }
         } catch (error) {
             ui.showStatus('Error: ' + error.message, 'error');
-            logger.error('Error running rules:', error);
         }
     }
 
-    /**
-     * Refresh Tuta page
-     */
     async _refreshPage() {
-        try {
-            const success = await tabs.reloadTutaTab();
-            if (success) {
-                ui.showStatus('Page refreshed', 'success');
-            } else {
-                ui.showStatus('No Tuta Mail tab found to refresh', 'error');
-            }
-        } catch (error) {
-            ui.showStatus('Error refreshing page', 'error');
-        }
+        const success = await tabs.reloadTutaTab();
+        ui.showStatus(success ? 'Page refreshed' : 'No Tuta tab found', success ? 'success' : 'error');
     }
 
-    /**
-     * Open popup in a new window
-     */
     async _openInWindow() {
         const newWindow = await tabs.openInWindow();
-        if (newWindow) {
-            // Close the popup
-            window.close();
-        }
+        if (newWindow) window.close();
     }
 
     /**
-     * Export rules to JSON file
+     * Export rules
      */
     _exportRules() {
         const rules = rulesManager.getAllRules();
@@ -512,105 +515,75 @@ class PopupController {
         }
 
         const exportData = {
-            version: '1.0',
+            version: '1.1',
             exportedAt: new Date().toISOString(),
             account: this._currentAccount,
-            rules: rules
+            rules
         };
 
-        const jsonString = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-
-        // Create download link
+        
         const a = document.createElement('a');
         a.href = url;
         a.download = `tutorg-rules-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        ui.showStatus(`Exported ${rules.length} rule(s)`, 'success');
-        logger.log('Exported rules:', rules.length);
+        ui.showStatus(`Exported ${rules.length} rules`, 'success');
     }
 
-    /**
-     * Trigger file input for import
-     */
     _triggerImport() {
-        const importInput = $('#importFileInput');
-        if (importInput) {
-            importInput.value = ''; // Reset to allow same file
-            importInput.click();
+        const input = $('#importFileInput');
+        if (input) {
+            input.value = '';
+            input.click();
         }
     }
 
-    /**
-     * Handle imported file
-     * @param {Event} event - Change event from file input
-     */
     async _handleImportFile(event) {
         const file = event.target.files?.[0];
         if (!file) return;
 
         try {
-            const text = await file.text();
-            const data = JSON.parse(text);
+            const data = JSON.parse(await file.text());
 
-            // Validate import data
-            if (!data.rules || !Array.isArray(data.rules)) {
-                ui.showStatus('Invalid file format: missing rules array', 'error');
+            if (!data.rules?.length) {
+                ui.showStatus('No rules found in file', 'error');
                 return;
             }
 
-            // Validate each rule
-            const validRules = data.rules.filter(rule => 
-                rule.name && 
-                rule.matchType && 
-                rule.action &&
-                (rule.matchValue || (rule.senderValue && rule.subjectValue))
+            const validRules = data.rules.filter(r => 
+                r.name && r.matchType && r.action &&
+                (r.matchValue || (r.senderValue && r.subjectValue))
             );
 
             if (validRules.length === 0) {
-                ui.showStatus('No valid rules found in file', 'error');
+                ui.showStatus('No valid rules in file', 'error');
                 return;
             }
 
-            // Ask user how to handle import
             const existingCount = rulesManager.getAllRules().length;
-            let mode = 'merge'; // Default: merge
+            let mode = 'merge';
             
             if (existingCount > 0) {
-                const replace = confirm(
-                    `Found ${validRules.length} rules to import.\n\n` +
-                    `You have ${existingCount} existing rules.\n\n` +
-                    `Click OK to REPLACE all existing rules.\n` +
-                    `Click Cancel to MERGE (add to existing rules).`
-                );
-                mode = replace ? 'replace' : 'merge';
+                mode = confirm(
+                    `Import ${validRules.length} rules?\n\n` +
+                    `OK = Replace existing\nCancel = Merge`
+                ) ? 'replace' : 'merge';
             }
 
-            // Import rules
             const imported = await rulesManager.importRules(validRules, mode);
             rulesManager.renderRules();
-
-            ui.showStatus(
-                `Imported ${imported} rule(s)` + (mode === 'merge' ? ' (merged)' : ' (replaced)'),
-                'success'
-            );
-            logger.log('Imported rules:', imported, 'mode:', mode);
+            ui.showStatus(`Imported ${imported} rules`, 'success');
 
         } catch (error) {
-            logger.error('Import error:', error);
-            ui.showStatus('Error reading file: ' + error.message, 'error');
+            ui.showStatus('Error: ' + error.message, 'error');
         }
     }
 }
 
-// Initialize when DOM is ready
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    const controller = new PopupController();
-    controller.init();
+    new PopupController().init();
 });
-

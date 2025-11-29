@@ -69,6 +69,7 @@ export const MATCH_TYPES = {
 export const ACTION_TYPES = {
     'trash': 'Move to Trash',
     'archive': 'Archive',
+    'move-to-folder': 'Move to Folder',
     'mark-read': 'Mark as Read',
     'mark-unread': 'Mark as Unread',
     'select-only': 'Select Only'
