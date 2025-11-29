@@ -160,14 +160,12 @@ class TabService {
     }
 
     /**
-     * Check if we're running in a popup window (detached mode)
+     * Check if we're running in window mode (detached popup)
      * @returns {boolean}
      */
     isWindowMode() {
-        // Check if the window has minimal chrome (popup window)
-        return window.opener === null && 
-               window.location.href.includes('popup.html') &&
-               window.innerWidth < 500;
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('mode') === 'window';
     }
 
     /**
@@ -178,7 +176,8 @@ class TabService {
         // Store the current Tuta tab before opening window
         await this.storeCurrentTutaTab();
         
-        const popupURL = chrome.runtime.getURL('src/popup/popup.html');
+        // Add mode=window param so popup knows it's in window mode
+        const popupURL = chrome.runtime.getURL('src/popup/popup.html?mode=window');
         
         try {
             const newWindow = await chrome.windows.create({
