@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TutOrg</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>📧 TutOrg</h1>
+                <button id="openWindow" class="btn-icon" aria-label="Open in new window">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="account-bar">
+            <span class="account-label">Account:</span>
+            <span id="currentAccount" class="account-value">Detecting...</span>
+        </div>
+
+        <div class="status-bar">
+            <div id="status" class="status-message"></div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="runRules" class="btn btn-primary">▶ Run Rules Now</button>
+            <button id="refreshPage" class="btn btn-secondary">🔄 Refresh Page</button>
+        </div>
+
+        <div class="rules-section">
+            <div class="section-header">
+                <h2>Email Rules</h2>
+                <button id="addRule" class="btn btn-small">+ Add Rule</button>
+            </div>
+            
+            <div id="rulesList"></div>
+        </div>
+
+        <div id="addRuleForm" class="rule-form hidden">
+            <h3 id="formTitle">Add New Rule</h3>
+            
+            <div class="form-group">
+                <label for="ruleName">Rule Name</label>
+                <input type="text" id="ruleName" placeholder="e.g., Archive Fedora Summaries">
+            </div>
+
+            <div class="form-group">
+                <label for="matchType">Match Type</label>
+                <select id="matchType">
+                    <option value="subject">Subject (exact match)</option>
+                    <option value="subject-contains">Subject Contains</option>
+                    <option value="sender">Sender Name (exact match)</option>
+                    <option value="sender-contains">Sender Name Contains</option>
+                    <option value="sender-and-subject">Sender + Subject (both must match)</option>
+                </select>
+                <div id="matchTypeHelp" class="form-help"></div>
+            </div>
+
+            <div class="form-group" id="simpleMatchGroup">
+                <label for="matchValue">Match Value</label>
+                <input type="text" id="matchValue" placeholder="e.g., [Fedora Discussion] Summary">
+            </div>
+
+            <div id="complexMatchGroup" class="hidden">
+                <div class="form-group">
+                    <label for="senderValue">Sender Name Contains</label>
+                    <input type="text" id="senderValue" placeholder="e.g., Newsletter">
+                </div>
+                <div class="form-group">
+                    <label for="subjectValue">Subject Contains</label>
+                    <input type="text" id="subjectValue" placeholder="e.g., Weekly Update">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="action">Action</label>
+                <select id="action">
+                    <option value="trash">Move to Trash</option>
+                    <option value="archive">Archive</option>
+                    <option value="mark-read">Mark as Read</option>
+                    <option value="mark-unread">Mark as Unread</option>
+                    <option value="select-only">Select Only (No Action)</option>
+                </select>
+            </div>
+
+            <div class="form-group checkbox-group">
+                <label>
+                    <input type="checkbox" id="enabled" checked>
+                    <span>Enable rule immediately</span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button id="saveRule" class="btn btn-primary">Save Rule</button>
+                <button id="cancelRule" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <footer>
+            <p class="help-text">💡 Rules are applied to visible emails. Use <kbd>Alt+Shift+R</kbd> to run rules.</p>
+        </footer>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+</body>
+</html>
+
