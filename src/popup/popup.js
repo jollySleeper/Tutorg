@@ -9,11 +9,22 @@ import { ui } from './ui.js';
 import { rulesManager } from './rules.js';
 
 /**
+ * Account detection configuration
+ */
+const ACCOUNT_DETECTION = {
+    MAX_RETRIES: 3,
+    INITIAL_DELAY: 500,  // ms
+    BACKOFF_MULTIPLIER: 1.5
+};
+
+/**
  * Popup Controller
  */
 class PopupController {
     constructor() {
         this._boundHandlers = {};
+        this._currentAccount = 'default';
+        this._isDetectingAccount = false;
     }
 
     /**
@@ -32,25 +43,56 @@ class PopupController {
             logger.log('Running in window mode');
         }
         
-        // Detect account
-        const account = await this._detectAccount();
-        
-        // Initialize rules manager
-        await rulesManager.init(account);
-        
-        // Update UI
-        ui.updateAccountDisplay(account);
-        rulesManager.renderRules();
-        
-        // Setup event listeners
+        // Setup event listeners first (so retry button works)
         this._setupEventListeners();
         this._setupTooltips();
         
-        logger.log('Popup initialized, account:', account);
+        // Detect account with auto-retry
+        this._currentAccount = await this._detectAccountWithRetry();
+        
+        // Initialize rules manager
+        await rulesManager.init(this._currentAccount);
+        
+        // Update UI
+        ui.updateAccountDisplay(this._currentAccount);
+        rulesManager.renderRules();
+        
+        logger.log('Popup initialized, account:', this._currentAccount);
     }
 
     /**
-     * Detect current Tuta account
+     * Detect account with auto-retry and exponential backoff
+     * @returns {Promise<string>} - Account identifier
+     */
+    async _detectAccountWithRetry() {
+        this._setAccountDetecting(true);
+        
+        let delay = ACCOUNT_DETECTION.INITIAL_DELAY;
+        
+        for (let attempt = 1; attempt <= ACCOUNT_DETECTION.MAX_RETRIES; attempt++) {
+            logger.log(`Account detection attempt ${attempt}/${ACCOUNT_DETECTION.MAX_RETRIES}`);
+            
+            const account = await this._detectAccount();
+            
+            if (account !== 'default') {
+                this._setAccountDetecting(false);
+                return account;
+            }
+            
+            // Wait before retry (except on last attempt)
+            if (attempt < ACCOUNT_DETECTION.MAX_RETRIES) {
+                await this._sleep(delay);
+                delay *= ACCOUNT_DETECTION.BACKOFF_MULTIPLIER;
+            }
+        }
+        
+        this._setAccountDetecting(false);
+        logger.log('Account detection failed after retries, using default');
+        return 'default';
+    }
+
+    /**
+     * Single attempt to detect account
      * @returns {Promise<string>} - Account identifier
      */
     async _detectAccount() {
@@ -66,6 +108,57 @@ class PopupController {
     }
 
     /**
+     * Manual retry account detection
+     */
+    async _retryAccountDetection() {
+        if (this._isDetectingAccount) {
+            logger.log('Account detection already in progress');
+            return;
+        }
+        
+        ui.showStatus('Reconnecting to Tuta Mail...', 'success');
+        
+        this._currentAccount = await this._detectAccountWithRetry();
+        ui.updateAccountDisplay(this._currentAccount);
+        
+        // Re-initialize rules for new account
+        await rulesManager.init(this._currentAccount);
+        rulesManager.renderRules();
+        
+        if (this._currentAccount !== 'default') {
+            ui.showStatus('✓ Connected to ' + this._currentAccount, 'success');
+        } else {
+            ui.showStatus('Could not detect account. Is Tuta Mail open?', 'error');
+        }
+    }
+
+    /**
+     * Update UI to show detection state
+     * @param {boolean} detecting - Whether detection is in progress
+     */
+    _setAccountDetecting(detecting) {
+        this._isDetectingAccount = detecting;
+        const retryBtn = $('#retryAccount');
+        
+        if (retryBtn) {
+            retryBtn.disabled = detecting;
+            retryBtn.classList.toggle('spinning', detecting);
+        }
+        
+        if (detecting) {
+            ui.updateAccountDisplay('Detecting...');
+        }
+    }
+
+    /**
+     * Sleep utility
+     * @param {number} ms - Milliseconds to sleep
+     */
+    _sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
      * Setup all event listeners
      */
     _setupEventListeners() {
@@ -76,6 +169,7 @@ class PopupController {
         this._addClickHandler('runRules', () => this._runRules());
         this._addClickHandler('refreshPage', () => this._refreshPage());
         this._addClickHandler('openWindow', () => this._openInWindow());
+        this._addClickHandler('retryAccount', () => this._retryAccountDetection());
 
         // Match type change
         const matchType = $('#matchType');
@@ -110,6 +204,12 @@ class PopupController {
         const openWindowBtn = $('#openWindow');
         if (openWindowBtn) {
             ui.setupTooltip(openWindowBtn, 'Open in a separate window');
+        }
+
+        // Retry Account button tooltip
+        const retryBtn = $('#retryAccount');
+        if (retryBtn) {
+            ui.setupTooltip(retryBtn, 'Retry connecting to Tuta Mail tab');
         }
     }
 
