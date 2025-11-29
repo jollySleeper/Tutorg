@@ -148,14 +148,27 @@ class PopupController {
      * Load available folders from Tuta
      */
     async _loadFolders() {
+        const select = $('#targetFolder');
+        if (select) {
+            select.innerHTML = '<option value="">Loading folders...</option>';
+            select.disabled = true;
+        }
+        
         try {
             const response = await tabs.sendToTutaTab({ action: 'getFolders' });
-            if (response?.folders) {
+            if (response?.folders && response.folders.length > 0) {
                 this._availableFolders = response.folders;
                 this._populateFolderSelect();
+                logger.log('Loaded', response.folders.length, 'folders');
+            } else {
+                this._populateFolderSelect(); // Shows empty state
+                logger.log('No folders returned from Tuta');
             }
         } catch (error) {
             logger.log('Could not load folders:', error.message);
+            if (select) {
+                select.innerHTML = '<option value="">Failed to load folders</option>';
+            }
         }
     }
 
@@ -166,12 +179,19 @@ class PopupController {
         const select = $('#targetFolder');
         if (!select) return;
         
+        select.disabled = false;
         select.innerHTML = '<option value="">Select folder...</option>';
+        
+        if (this._availableFolders.length === 0) {
+            select.innerHTML = '<option value="">No folders available</option>';
+            return;
+        }
         
         this._availableFolders.forEach(folder => {
             const option = document.createElement('option');
             option.value = folder.name;
-            option.textContent = folder.name;
+            // Use displayName if available, fallback to name
+            option.textContent = folder.displayName || folder.name;
             select.appendChild(option);
         });
     }
