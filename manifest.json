@@ -1,19 +1,20 @@
 {
   "manifest_version": 3,
   "name": "TutOrg",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automatically organize emails based on custom rules",
   "permissions": [
     "storage",
     "activeTab",
-    "notifications"
+    "notifications",
+    "tabs"
   ],
   "host_permissions": [
     "https://mail.tuta.com/*",
     "https://app.tuta.com/*"
   ],
   "action": {
-    "default_popup": "src/popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
