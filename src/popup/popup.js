@@ -463,23 +463,17 @@ class PopupController {
     }
 
     /**
-     * Set tags in a container
+     * Set tags in a container (array format only)
      */
     _setTags(containerId, values) {
         this._clearTags(containerId);
-        if (!values) return;
-        
-        // Handle both comma-separated string and array
-        const valuesArray = typeof values === 'string' 
-            ? values.split(',').map(v => v.trim()).filter(v => v)
-            : values;
-        
-        valuesArray.forEach(value => this._addTag(containerId, value));
+        if (!values || !Array.isArray(values)) return;
+        values.forEach(value => this._addTag(containerId, value));
     }
 
     /**
      * Populate form with rule data
-     * Supports both old comma-separated and new array formats
+     * Uses array format: matchValues, senderValues, subjectValues
      */
     _populateForm(rule) {
         ui.setFieldValue('ruleName', rule.name);
@@ -491,17 +485,12 @@ class PopupController {
             ui.setFieldValue('targetFolder', rule.targetFolder);
         }
 
-        // Set tags for match values (handle both array and comma-separated formats)
+        // Set tags for match values (array format)
         if (rule.matchType === 'sender-and-subject') {
-            // Prefer new array format, fallback to old comma-separated
-            const senderValues = rule.senderValues || rule.senderValue || '';
-            const subjectValues = rule.subjectValues || rule.subjectValue || '';
-            this._setTags('senderValues', senderValues);
-            this._setTags('subjectValues', subjectValues);
+            this._setTags('senderValues', rule.senderValues || []);
+            this._setTags('subjectValues', rule.subjectValues || []);
         } else {
-            // Prefer new array format, fallback to old comma-separated
-            const matchValues = rule.matchValues || rule.matchValue || '';
-            this._setTags('matchValues', matchValues);
+            this._setTags('matchValues', rule.matchValues || []);
         }
     }
 
