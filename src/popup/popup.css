@@ -24,6 +24,7 @@
     /* Backgrounds */
     --bg-primary: #ffffff;
     --bg-secondary: #f8f9fa;
+    --bg-tertiary: #f0f0f0;
     --bg-dark: #2d2d2d;
     --bg-input: #ffffff;
     --bg-overlay: rgba(0, 0, 0, 0.5);
@@ -909,6 +910,7 @@ footer {
         
         --bg-primary: #1a1a1a;
         --bg-secondary: #242424;
+        --bg-tertiary: #1f1f1f;
         --bg-dark: #0d0d0d;
         --bg-input: #2d2d2d;
         --bg-overlay: rgba(0, 0, 0, 0.7);
