@@ -240,60 +240,81 @@ function extractSubjectFromRow(row) {
 // ============================================
 // Rule Matching (with multi-value support)
 // ============================================
-function matchesRule(row, rule) {
-    const sender = extractSenderFromRow(row);
-    const subject = extractSubjectFromRow(row);
+
+/**
+ * Collect all visible emails with their data
+ * Called ONCE before processing all rules
+ */
+function collectAllEmails() {
+    const rows = $$(SELECTORS.emailRow);
+    const emails = [];
+    
+    log(`Collecting ${rows.length} visible emails`);
+    
+    rows.forEach((row, index) => {
+        emails.push({
+            row,
+            index,
+            sender: extractSenderFromRow(row),
+            subject: extractSubjectFromRow(row),
+            processed: false // Track if already processed by a rule
+        });
+    });
+    
+    return emails;
+}
+
+/**
+ * Find matching emails from pre-collected data
+ */
+function findMatchingEmails(rule, emailsData) {
+    const matches = [];
+    
+    emailsData.forEach(email => {
+        // Skip already processed emails
+        if (email.processed) return;
+        
+        if (matchesRuleWithData(email, rule)) {
+            matches.push(email);
+            log(`Match found: "${email.subject}" from "${email.sender}"`);
+        }
+    });
+    
+    return matches;
+}
+
+/**
+ * Match rule against pre-extracted email data
+ */
+function matchesRuleWithData(email, rule) {
+    const { sender, subject } = email;
     
     switch (rule.matchType) {
         case 'subject': {
             const values = parseMultiValue(rule.matchValue);
             return matchesAnyValue(subject, values, true);
         }
-            
         case 'subject-contains': {
             const values = parseMultiValue(rule.matchValue);
             return matchesAnyValue(subject, values, false);
         }
-            
         case 'sender': {
             const values = parseMultiValue(rule.matchValue);
             return matchesAnyValue(sender, values, true);
         }
-            
         case 'sender-contains': {
             const values = parseMultiValue(rule.matchValue);
             return matchesAnyValue(sender, values, false);
         }
-            
         case 'sender-and-subject': {
             const senderValues = parseMultiValue(rule.senderValue);
             const subjectValues = parseMultiValue(rule.subjectValue);
-            
-            const senderMatch = matchesAnyValue(sender, senderValues, false);
-            const subjectMatch = matchesAnyValue(subject, subjectValues, false);
-            
-            return senderMatch && subjectMatch;
+            return matchesAnyValue(sender, senderValues, false) && 
+                   matchesAnyValue(subject, subjectValues, false);
         }
-            
         default:
             return false;
     }
-}
-
-function findMatchingEmails(rule) {
-    const rows = $$(SELECTORS.emailRow);
-    const matches = [];
-    
-    log(`Scanning ${rows.length} emails for rule: ${rule.name}`);
-    
-    rows.forEach((row, index) => {
-        if (matchesRule(row, rule)) {
-            matches.push(row);
-            log(`Match found at row ${index}`);
-        }
-    });
-    
-    return matches;
 }
 
 // ============================================
@@ -439,7 +460,14 @@ async function performAction(action, count, rule = {}) {
 // ============================================
 // Rule Processing
 // ============================================
-async function processRule(rule) {
+
+/**
+ * Process a single rule against pre-collected emails
+ * @param {Object} rule - The rule to process
+ * @param {Array} emailsData - Pre-collected email data
+ * @returns {Promise<number>} - Number of emails processed
+ */
+async function processRule(rule, emailsData) {
     log(`Processing rule: ${rule.name}`);
     
     if (rule.matchType === 'sender-and-subject') {
@@ -448,7 +476,8 @@ async function processRule(rule) {
         log(`  Match: "${rule.matchValue}"`);
     }
     
-    const matches = findMatchingEmails(rule);
+    // Find matches from pre-collected data
+    const matches = findMatchingEmails(rule, emailsData);
     
     if (matches.length === 0) {
         log(`  No matches found`);
@@ -457,25 +486,45 @@ async function processRule(rule) {
     
     log(`  Found ${matches.length} match(es)`);
     
-    selectEmails(matches);
+    // Get actual row elements
+    const rows = matches.map(m => m.row);
+    
+    selectEmails(rows);
     await sleep(TIMING.actionDelay);
     
     if (rule.action !== 'select-only') {
         await performAction(rule.action, matches.length, rule);
+        
+        // Mark these emails as processed (they've been moved/deleted)
+        matches.forEach(m => m.processed = true);
     }
     
     return matches.length;
 }
 
+/**
+ * Run all rules on current page
+ * Collects emails ONCE then applies all rules
+ */
 async function runRulesOnPage(rules) {
     log(`Starting rule execution with ${rules.length} rules`);
     
     try {
+        // IMPORTANT: Collect all emails ONCE before processing any rules
+        const emailsData = collectAllEmails();
+        log(`Collected ${emailsData.length} emails to process`);
+        
+        if (emailsData.length === 0) {
+            showIndicator('No emails visible');
+            return { success: true, message: 'No emails visible', results: [] };
+        }
+        
         let totalProcessed = 0;
         const results = [];
         
+        // Process each rule against the same collected emails
         for (const rule of rules) {
-            const count = await processRule(rule);
+            const count = await processRule(rule, emailsData);
             totalProcessed += count;
             results.push({ rule: rule.name, count });
         }
