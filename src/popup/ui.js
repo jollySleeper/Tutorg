@@ -177,12 +177,15 @@ class UIService {
     }
 
     /**
-     * Count comma-separated values
-     * @param {string} value - Comma-separated string
+     * Count values (handles both array and comma-separated string)
+     * @param {string|Array} value - Array or comma-separated string
      * @returns {number} - Number of values
      */
     _countValues(value) {
         if (!value) return 0;
+        if (Array.isArray(value)) {
+            return value.filter(v => v).length;
+        }
         return value.split(',').map(v => v.trim()).filter(v => v).length;
     }
 
@@ -198,31 +201,53 @@ class UIService {
     }
 
     /**
+     * Convert value to display string (handles array or string)
+     */
+    _toDisplayString(value) {
+        if (Array.isArray(value)) {
+            return value.join(', ');
+        }
+        return value || '';
+    }
+
+    /**
      * Format rule match for display (handles complex rules and multi-values)
+     * Supports both new array format and old string format
      * @param {Object} rule - Rule object
      * @returns {string} - HTML string
      */
     formatRuleMatch(rule) {
         if (rule.matchType === 'sender-and-subject') {
-            const senderCount = this._countValues(rule.senderValue);
-            const subjectCount = this._countValues(rule.subjectValue);
+            // Support both new (senderValues) and old (senderValue) formats
+            const senderVal = rule.senderValues || rule.senderValue;
+            const subjectVal = rule.subjectValues || rule.subjectValue;
+            
+            const senderStr = this._toDisplayString(senderVal);
+            const subjectStr = this._toDisplayString(subjectVal);
+            
+            const senderCount = this._countValues(senderVal);
+            const subjectCount = this._countValues(subjectVal);
             
             return `
-                <span class="rule-match rule-match-complex" title="${escapeHtml(rule.senderValue || '')}">
-                    Sender: ${this._truncate(escapeHtml(rule.senderValue || ''))}
+                <span class="rule-match rule-match-complex" title="${escapeHtml(senderStr)}">
+                    Sender: ${this._truncate(escapeHtml(senderStr))}
                     ${senderCount > 1 ? `<span class="rule-match-count">${senderCount}</span>` : ''}
                 </span>
                 <span class="rule-match-and">AND</span>
-                <span class="rule-match rule-match-complex" title="${escapeHtml(rule.subjectValue || '')}">
-                    Subject: ${this._truncate(escapeHtml(rule.subjectValue || ''))}
+                <span class="rule-match rule-match-complex" title="${escapeHtml(subjectStr)}">
+                    Subject: ${this._truncate(escapeHtml(subjectStr))}
                     ${subjectCount > 1 ? `<span class="rule-match-count">${subjectCount}</span>` : ''}
                 </span>
             `;
         }
         
-        const valueCount = this._countValues(rule.matchValue);
-        const displayValue = this._truncate(escapeHtml(rule.matchValue));
-        const fullValue = escapeHtml(rule.matchValue);
+        // Support both new (matchValues) and old (matchValue) formats
+        const matchVal = rule.matchValues || rule.matchValue;
+        const matchStr = this._toDisplayString(matchVal);
+        
+        const valueCount = this._countValues(matchVal);
+        const displayValue = this._truncate(escapeHtml(matchStr));
+        const fullValue = escapeHtml(matchStr);
         
         return `
             <span class="rule-match" title="${fullValue}">

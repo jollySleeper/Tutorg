@@ -76,14 +76,25 @@ const $$ = (selector, context = document) => {
 };
 
 /**
- * Parse comma-separated values into array
- * Handles spaces and trims each value
+ * Get values array from rule property
+ * Handles both new array format and old comma-separated string format
  */
-function parseMultiValue(value) {
+function getValuesArray(value) {
     if (!value) return [];
-    return value.split(',')
-        .map(v => v.trim())
-        .filter(v => v.length > 0);
+    
+    // If already an array, return it
+    if (Array.isArray(value)) {
+        return value.filter(v => v && v.length > 0);
+    }
+    
+    // If string, parse comma-separated (backward compatibility)
+    if (typeof value === 'string') {
+        return value.split(',')
+            .map(v => v.trim())
+            .filter(v => v.length > 0);
+    }
+    
+    return [];
 }
 
 /**
@@ -285,32 +296,32 @@ function findMatchingEmails(rule, emailsData) {
 
 /**
  * Match rule against pre-extracted email data
+ * Supports both new array format (matchValues) and old comma-separated (matchValue)
  */
 function matchesRuleWithData(email, rule) {
     const { sender, subject } = email;
     
+    // Helper to get values - prefer new array format, fallback to old
+    const getMatchValues = () => getValuesArray(rule.matchValues || rule.matchValue);
+    const getSenderValues = () => getValuesArray(rule.senderValues || rule.senderValue);
+    const getSubjectValues = () => getValuesArray(rule.subjectValues || rule.subjectValue);
+    
     switch (rule.matchType) {
         case 'subject': {
-            const values = parseMultiValue(rule.matchValue);
-            return matchesAnyValue(subject, values, true);
+            return matchesAnyValue(subject, getMatchValues(), true);
         }
         case 'subject-contains': {
-            const values = parseMultiValue(rule.matchValue);
-            return matchesAnyValue(subject, values, false);
+            return matchesAnyValue(subject, getMatchValues(), false);
         }
         case 'sender': {
-            const values = parseMultiValue(rule.matchValue);
-            return matchesAnyValue(sender, values, true);
+            return matchesAnyValue(sender, getMatchValues(), true);
         }
         case 'sender-contains': {
-            const values = parseMultiValue(rule.matchValue);
-            return matchesAnyValue(sender, values, false);
+            return matchesAnyValue(sender, getMatchValues(), false);
         }
         case 'sender-and-subject': {
-            const senderValues = parseMultiValue(rule.senderValue);
-            const subjectValues = parseMultiValue(rule.subjectValue);
-            return matchesAnyValue(sender, senderValues, false) && 
-                   matchesAnyValue(subject, subjectValues, false);
+            return matchesAnyValue(sender, getSenderValues(), false) && 
+                   matchesAnyValue(subject, getSubjectValues(), false);
         }
         default:
             return false;

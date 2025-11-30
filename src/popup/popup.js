@@ -479,6 +479,7 @@ class PopupController {
 
     /**
      * Populate form with rule data
+     * Supports both old comma-separated and new array formats
      */
     _populateForm(rule) {
         ui.setFieldValue('ruleName', rule.name);
@@ -490,12 +491,17 @@ class PopupController {
             ui.setFieldValue('targetFolder', rule.targetFolder);
         }
 
-        // Set tags for match values
+        // Set tags for match values (handle both array and comma-separated formats)
         if (rule.matchType === 'sender-and-subject') {
-            this._setTags('senderValues', rule.senderValue || '');
-            this._setTags('subjectValues', rule.subjectValue || '');
+            // Prefer new array format, fallback to old comma-separated
+            const senderValues = rule.senderValues || rule.senderValue || '';
+            const subjectValues = rule.subjectValues || rule.subjectValue || '';
+            this._setTags('senderValues', senderValues);
+            this._setTags('subjectValues', subjectValues);
         } else {
-            this._setTags('matchValues', rule.matchValue || '');
+            // Prefer new array format, fallback to old comma-separated
+            const matchValues = rule.matchValues || rule.matchValue || '';
+            this._setTags('matchValues', matchValues);
         }
     }
 
@@ -551,13 +557,14 @@ class PopupController {
             }
         }
 
-        // Handle match values from tags
+        // Handle match values from tags - store as arrays
         if (isComplex) {
             const senderTags = this._getTags('senderValues');
             const subjectTags = this._getTags('subjectValues');
             
-            ruleData.senderValue = senderTags.join(', ');
-            ruleData.subjectValue = subjectTags.join(', ');
+            // Store as arrays directly
+            ruleData.senderValues = senderTags;
+            ruleData.subjectValues = subjectTags;
 
             if (!ruleData.name || senderTags.length === 0 || subjectTags.length === 0) {
                 ui.showStatus('Please add at least one sender and subject value', 'error');
@@ -565,7 +572,9 @@ class PopupController {
             }
         } else {
             const matchTags = this._getTags('matchValues');
-            ruleData.matchValue = matchTags.join(', ');
+            
+            // Store as array directly
+            ruleData.matchValues = matchTags;
 
             if (!ruleData.name || matchTags.length === 0) {
                 ui.showStatus('Please add at least one match value', 'error');
