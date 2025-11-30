@@ -726,10 +726,18 @@ class PopupController {
                 return;
             }
 
-            const validRules = data.rules.filter(r => 
-                r.name && r.matchType && r.action &&
-                (r.matchValue || (r.senderValue && r.subjectValue))
-            );
+            // Validate rules - check for new array format
+            const validRules = data.rules.filter(r => {
+                if (!r.name || !r.matchType || !r.action) return false;
+                
+                if (r.matchType === 'sender-and-subject') {
+                    // Complex rule: needs both senderValues and subjectValues arrays
+                    return r.senderValues?.length > 0 && r.subjectValues?.length > 0;
+                } else {
+                    // Simple rule: needs matchValues array
+                    return r.matchValues?.length > 0;
+                }
+            });
 
             if (validRules.length === 0) {
                 ui.showStatus('No valid rules in file', 'error');
