@@ -167,7 +167,7 @@ class PopupController {
         } catch (error) {
             logger.log('Could not load folders:', error.message);
             if (select) {
-                select.innerHTML = '<option value="">Failed to load folders</option>';
+                select.innerHTML = '<option value="">Select an email in Tuta first</option>';
             }
         }
     }
@@ -207,7 +207,7 @@ class PopupController {
         select.innerHTML = '<option value="">Select folder...</option>';
         
         if (this._availableFolders.length === 0) {
-            select.innerHTML = '<option value="">No folders available</option>';
+            select.innerHTML = '<option value="">No folders - select email & refresh</option>';
             return;
         }
         
