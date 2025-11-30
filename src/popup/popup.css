@@ -741,6 +741,111 @@ footer {
     margin-top: 4px;
 }
 
+/* Multi-value input (tags style) */
+.multi-input-container {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-xs);
+    min-height: 38px;
+}
+
+.multi-input-container:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(184, 64, 94, 0.1);
+}
+
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.tags-list:empty {
+    margin-bottom: 0;
+}
+
+.tag-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--color-primary);
+    color: white;
+    padding: 2px 6px 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    max-width: 100%;
+}
+
+.tag-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-remove {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    padding: 0;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    transition: all var(--transition-fast);
+}
+
+.tag-remove:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.tag-input-row {
+    display: flex;
+    gap: 4px;
+}
+
+.tag-input-row input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.tag-input-row input::placeholder {
+    color: var(--text-muted);
+}
+
+.btn-add-tag {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius);
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-add-tag:hover {
+    background: var(--color-primary-hover);
+    transform: scale(1.05);
+}
+
 .checkbox-group label {
     display: flex;
     align-items: center;

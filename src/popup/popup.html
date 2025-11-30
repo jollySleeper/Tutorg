@@ -123,19 +123,37 @@
                     </div>
 
                     <div class="form-group" id="simpleMatchGroup">
-                        <label for="matchValue">Match Value <span class="label-hint">(comma-separated for multiple)</span></label>
-                        <input type="text" id="matchValue" placeholder="e.g., taxnodes1, taxnodes2, taxnodes3">
-                        <div class="form-hint">💡 Add multiple values separated by commas to match any of them</div>
+                        <label>Match Values</label>
+                        <div class="multi-input-container" id="matchValues">
+                            <div class="tags-list" id="matchValuesTags"></div>
+                            <div class="tag-input-row">
+                                <input type="text" id="matchValueInput" placeholder="Type value and press Enter">
+                                <button type="button" class="btn-add-tag" data-target="matchValues">+</button>
+                            </div>
+                        </div>
+                        <div class="form-hint">💡 Press Enter or click + to add. Match ANY of these values.</div>
                     </div>
 
                     <div id="complexMatchGroup" class="hidden">
                         <div class="form-group">
-                            <label for="senderValue">Sender Name Contains <span class="label-hint">(comma-separated for multiple)</span></label>
-                            <input type="text" id="senderValue" placeholder="e.g., Newsletter, Updates">
+                            <label>Sender Name Contains</label>
+                            <div class="multi-input-container" id="senderValues">
+                                <div class="tags-list" id="senderValuesTags"></div>
+                                <div class="tag-input-row">
+                                    <input type="text" id="senderValueInput" placeholder="Type sender name">
+                                    <button type="button" class="btn-add-tag" data-target="senderValues">+</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label for="subjectValue">Subject Contains <span class="label-hint">(comma-separated for multiple)</span></label>
-                            <input type="text" id="subjectValue" placeholder="e.g., Weekly, Daily">
+                            <label>Subject Contains</label>
+                            <div class="multi-input-container" id="subjectValues">
+                                <div class="tags-list" id="subjectValuesTags"></div>
+                                <div class="tag-input-row">
+                                    <input type="text" id="subjectValueInput" placeholder="Type subject text">
+                                    <button type="button" class="btn-add-tag" data-target="subjectValues">+</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -276,6 +276,9 @@ class PopupController {
             });
         }
 
+        // Multi-value input handlers
+        this._setupMultiValueInputs();
+
         // Escape key to close modal
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -352,12 +355,131 @@ class PopupController {
     _clearForm() {
         ui.setFieldValue('ruleName', '');
         ui.setFieldValue('matchType', 'subject-contains');
-        ui.setFieldValue('matchValue', '');
-        ui.setFieldValue('senderValue', '');
-        ui.setFieldValue('subjectValue', '');
         ui.setFieldValue('action', 'select-only');
         ui.setFieldValue('targetFolder', '');
         ui.setCheckboxValue('enabled', true);
+        
+        // Clear all tag inputs
+        this._clearTags('matchValues');
+        this._clearTags('senderValues');
+        this._clearTags('subjectValues');
+        
+        // Clear text inputs
+        const inputs = ['matchValueInput', 'senderValueInput', 'subjectValueInput'];
+        inputs.forEach(id => {
+            const input = $(`#${id}`);
+            if (input) input.value = '';
+        });
+    }
+
+    /**
+     * Setup multi-value input handlers
+     */
+    _setupMultiValueInputs() {
+        // Add tag buttons
+        const addButtons = $$('.btn-add-tag');
+        addButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.target;
+                const inputId = target.replace('Values', 'ValueInput');
+                this._addTagFromInput(target, inputId);
+            });
+        });
+
+        // Enter key to add tag
+        const tagInputs = ['matchValueInput', 'senderValueInput', 'subjectValueInput'];
+        tagInputs.forEach(inputId => {
+            const input = $(`#${inputId}`);
+            if (input) {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const target = inputId.replace('ValueInput', 'Values');
+                        this._addTagFromInput(target, inputId);
+                    }
+                });
+            }
+        });
+
+        // Click to remove tag (delegation)
+        const containers = ['matchValues', 'senderValues', 'subjectValues'];
+        containers.forEach(containerId => {
+            const container = $(`#${containerId}`);
+            if (container) {
+                container.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('tag-remove')) {
+                        e.target.closest('.tag-item').remove();
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Add tag from input field
+     */
+    _addTagFromInput(containerId, inputId) {
+        const input = $(`#${inputId}`);
+        if (!input) return;
+        
+        const value = input.value.trim();
+        if (!value) return;
+        
+        this._addTag(containerId, value);
+        input.value = '';
+        input.focus();
+    }
+
+    /**
+     * Add a tag to a container
+     */
+    _addTag(containerId, value) {
+        const tagsContainer = $(`#${containerId}Tags`);
+        if (!tagsContainer) return;
+        
+        const tag = document.createElement('div');
+        tag.className = 'tag-item';
+        tag.innerHTML = `
+            <span title="${value}">${value}</span>
+            <button type="button" class="tag-remove" aria-label="Remove">×</button>
+        `;
+        tagsContainer.appendChild(tag);
+    }
+
+    /**
+     * Get all tags from a container
+     */
+    _getTags(containerId) {
+        const tagsContainer = $(`#${containerId}Tags`);
+        if (!tagsContainer) return [];
+        
+        const tags = tagsContainer.querySelectorAll('.tag-item span');
+        return Array.from(tags).map(span => span.textContent);
+    }
+
+    /**
+     * Clear all tags from a container
+     */
+    _clearTags(containerId) {
+        const tagsContainer = $(`#${containerId}Tags`);
+        if (tagsContainer) {
+            tagsContainer.innerHTML = '';
+        }
+    }
+
+    /**
+     * Set tags in a container
+     */
+    _setTags(containerId, values) {
+        this._clearTags(containerId);
+        if (!values) return;
+        
+        // Handle both comma-separated string and array
+        const valuesArray = typeof values === 'string' 
+            ? values.split(',').map(v => v.trim()).filter(v => v)
+            : values;
+        
+        valuesArray.forEach(value => this._addTag(containerId, value));
     }
 
     /**
@@ -373,11 +495,12 @@ class PopupController {
             ui.setFieldValue('targetFolder', rule.targetFolder);
         }
 
+        // Set tags for match values
         if (rule.matchType === 'sender-and-subject') {
-            ui.setFieldValue('senderValue', rule.senderValue || '');
-            ui.setFieldValue('subjectValue', rule.subjectValue || '');
+            this._setTags('senderValues', rule.senderValue || '');
+            this._setTags('subjectValues', rule.subjectValue || '');
         } else {
-            ui.setFieldValue('matchValue', rule.matchValue || '');
+            this._setTags('matchValues', rule.matchValue || '');
         }
     }
 
@@ -433,20 +556,24 @@ class PopupController {
             }
         }
 
-        // Handle match values
+        // Handle match values from tags
         if (isComplex) {
-            ruleData.senderValue = ui.getFieldValue('senderValue');
-            ruleData.subjectValue = ui.getFieldValue('subjectValue');
+            const senderTags = this._getTags('senderValues');
+            const subjectTags = this._getTags('subjectValues');
+            
+            ruleData.senderValue = senderTags.join(', ');
+            ruleData.subjectValue = subjectTags.join(', ');
 
-            if (!ruleData.name || !ruleData.senderValue || !ruleData.subjectValue) {
-                ui.showStatus('Please fill in all required fields', 'error');
+            if (!ruleData.name || senderTags.length === 0 || subjectTags.length === 0) {
+                ui.showStatus('Please add at least one sender and subject value', 'error');
                 return;
             }
         } else {
-            ruleData.matchValue = ui.getFieldValue('matchValue');
+            const matchTags = this._getTags('matchValues');
+            ruleData.matchValue = matchTags.join(', ');
 
-            if (!ruleData.name || !ruleData.matchValue) {
-                ui.showStatus('Please fill in all required fields', 'error');
+            if (!ruleData.name || matchTags.length === 0) {
+                ui.showStatus('Please add at least one match value', 'error');
                 return;
             }
         }
