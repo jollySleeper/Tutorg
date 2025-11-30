@@ -373,46 +373,41 @@ class PopupController {
     }
 
     /**
-     * Setup multi-value input handlers
+     * Setup multi-value input handlers using event delegation
      */
     _setupMultiValueInputs() {
-        // Add tag buttons
-        const addButtons = $$('.btn-add-tag');
-        addButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const target = btn.dataset.target;
+        const modal = $('#ruleModal');
+        if (!modal) {
+            logger.error('Modal not found for multi-value setup');
+            return;
+        }
+
+        // Use event delegation on the modal for all tag-related actions
+        modal.addEventListener('click', (e) => {
+            // Add tag button clicked
+            if (e.target.classList.contains('btn-add-tag')) {
+                const target = e.target.dataset.target;
                 const inputId = target.replace('Values', 'ValueInput');
                 this._addTagFromInput(target, inputId);
-            });
-        });
-
-        // Enter key to add tag
-        const tagInputs = ['matchValueInput', 'senderValueInput', 'subjectValueInput'];
-        tagInputs.forEach(inputId => {
-            const input = $(`#${inputId}`);
-            if (input) {
-                input.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const target = inputId.replace('ValueInput', 'Values');
-                        this._addTagFromInput(target, inputId);
-                    }
-                });
+            }
+            
+            // Remove tag button clicked
+            if (e.target.classList.contains('tag-remove')) {
+                e.target.closest('.tag-item').remove();
             }
         });
 
-        // Click to remove tag (delegation)
-        const containers = ['matchValues', 'senderValues', 'subjectValues'];
-        containers.forEach(containerId => {
-            const container = $(`#${containerId}`);
-            if (container) {
-                container.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('tag-remove')) {
-                        e.target.closest('.tag-item').remove();
-                    }
-                });
+        // Enter key to add tag (using event delegation)
+        modal.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && e.target.matches('.tag-input-row input')) {
+                e.preventDefault();
+                const inputId = e.target.id;
+                const target = inputId.replace('ValueInput', 'Values');
+                this._addTagFromInput(target, inputId);
             }
         });
+        
+        logger.log('Multi-value input handlers initialized');
     }
 
     /**
