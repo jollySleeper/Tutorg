@@ -77,24 +77,11 @@ const $$ = (selector, context = document) => {
 
 /**
  * Get values array from rule property
- * Handles both new array format and old comma-separated string format
+ * Expects array format: ["val1", "val2"]
  */
 function getValuesArray(value) {
-    if (!value) return [];
-    
-    // If already an array, return it
-    if (Array.isArray(value)) {
-        return value.filter(v => v && v.length > 0);
-    }
-    
-    // If string, parse comma-separated (backward compatibility)
-    if (typeof value === 'string') {
-        return value.split(',')
-            .map(v => v.trim())
-            .filter(v => v.length > 0);
-    }
-    
-    return [];
+    if (!value || !Array.isArray(value)) return [];
+    return value.filter(v => v && v.length > 0);
 }
 
 /**
@@ -296,32 +283,27 @@ function findMatchingEmails(rule, emailsData) {
 
 /**
  * Match rule against pre-extracted email data
- * Supports both new array format (matchValues) and old comma-separated (matchValue)
+ * Uses array format: matchValues, senderValues, subjectValues
  */
 function matchesRuleWithData(email, rule) {
     const { sender, subject } = email;
     
-    // Helper to get values - prefer new array format, fallback to old
-    const getMatchValues = () => getValuesArray(rule.matchValues || rule.matchValue);
-    const getSenderValues = () => getValuesArray(rule.senderValues || rule.senderValue);
-    const getSubjectValues = () => getValuesArray(rule.subjectValues || rule.subjectValue);
-    
     switch (rule.matchType) {
         case 'subject': {
-            return matchesAnyValue(subject, getMatchValues(), true);
+            return matchesAnyValue(subject, getValuesArray(rule.matchValues), true);
         }
         case 'subject-contains': {
-            return matchesAnyValue(subject, getMatchValues(), false);
+            return matchesAnyValue(subject, getValuesArray(rule.matchValues), false);
         }
         case 'sender': {
-            return matchesAnyValue(sender, getMatchValues(), true);
+            return matchesAnyValue(sender, getValuesArray(rule.matchValues), true);
         }
         case 'sender-contains': {
-            return matchesAnyValue(sender, getMatchValues(), false);
+            return matchesAnyValue(sender, getValuesArray(rule.matchValues), false);
         }
         case 'sender-and-subject': {
-            return matchesAnyValue(sender, getSenderValues(), false) && 
-                   matchesAnyValue(subject, getSubjectValues(), false);
+            return matchesAnyValue(sender, getValuesArray(rule.senderValues), false) && 
+                   matchesAnyValue(subject, getValuesArray(rule.subjectValues), false);
         }
         default:
             return false;
@@ -348,11 +330,11 @@ function selectEmails(rows) {
         
         if (checkbox.checked) return;
         
-        checkbox.click();
-        
-        if (!checkbox.checked) {
-            checkbox.checked = true;
-            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                checkbox.click();
+                
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
         }
     });
 }
@@ -559,7 +541,7 @@ async function runRulesOnPage(rules) {
 function showIndicator(message) {
     const existing = $('#tuta-organizer-indicator');
     if (existing) existing.remove();
-    
+
     const indicator = document.createElement('div');
     indicator.id = 'tuta-organizer-indicator';
     indicator.style.cssText = `
@@ -592,7 +574,7 @@ function showIndicator(message) {
     }
     
     document.body.appendChild(indicator);
-    
+
     setTimeout(() => {
         if (indicator.parentNode) {
             indicator.style.animation = 'tutorg-slide 0.3s ease reverse';
