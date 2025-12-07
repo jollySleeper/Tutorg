@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TutOrg",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Automatically organize emails based on custom rules",
   "permissions": [
     "storage",
