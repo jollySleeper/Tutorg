@@ -14,6 +14,14 @@ const STORAGE_KEYS = {
 };
 const TUTA_URLS = ['mail.tuta.com', 'app.tuta.com'];
 
+function getRuleKeys(account = 'default') {
+    return {
+        accountKey: `${STORAGE_KEYS.RULES_PREFIX}${account}`,
+        defaultKey: `${STORAGE_KEYS.RULES_PREFIX}default`,
+        legacyKey: STORAGE_KEYS.LEGACY_RULES
+    };
+}
+
 // ============================================
 // Logger
 // ============================================
@@ -78,9 +86,29 @@ async function findTutaTab() {
  */
 async function getRules(account = 'default') {
     try {
-        const storageKey = `${STORAGE_KEYS.RULES_PREFIX}${account}`;
-        const result = await chrome.storage.sync.get([storageKey, STORAGE_KEYS.LEGACY_RULES]);
-        return result[storageKey] || result[STORAGE_KEYS.LEGACY_RULES] || [];
+        const { accountKey, defaultKey, legacyKey } = getRuleKeys(account);
+        const keys = [accountKey, defaultKey, legacyKey];
+
+        const [localResult, syncResult] = await Promise.all([
+            chrome.storage.local.get(keys),
+            chrome.storage.sync.get(keys)
+        ]);
+
+        const rules =
+            localResult[accountKey] ||
+            localResult[defaultKey] ||
+            localResult[legacyKey] ||
+            syncResult[accountKey] ||
+            syncResult[defaultKey] ||
+            syncResult[legacyKey] ||
+            [];
+
+        // Migrate to local if we only found data in sync
+        if (!localResult[accountKey] && rules.length > 0) {
+            await chrome.storage.local.set({ [accountKey]: rules });
+        }
+
+        return rules;
     } catch (error) {
         logError('Error loading rules:', error);
         return [];
@@ -92,8 +120,12 @@ async function getRules(account = 'default') {
  */
 async function saveRules(rules, account = 'default') {
     try {
-        const storageKey = `${STORAGE_KEYS.RULES_PREFIX}${account}`;
-        await chrome.storage.sync.set({ [storageKey]: rules });
+        const { accountKey, defaultKey } = getRuleKeys(account);
+        const payload = { [accountKey]: rules, [defaultKey]: rules };
+
+        await chrome.storage.local.set(payload);
+        await chrome.storage.sync.set(payload);
+
         log('Saved', rules.length, 'rules for account:', account);
         await updateBadge();
         return { success: true };
@@ -108,7 +140,11 @@ async function saveRules(rules, account = 'default') {
  */
 async function getEnabledRulesCount() {
     try {
-        const allStorage = await chrome.storage.sync.get(null);
+        const [localAll, syncAll] = await Promise.all([
+            chrome.storage.local.get(null),
+            chrome.storage.sync.get(null)
+        ]);
+        const allStorage = { ...syncAll, ...localAll }; // local wins
         let count = 0;
         
         for (const [key, value] of Object.entries(allStorage)) {
@@ -226,10 +262,13 @@ async function initializeDefaultRules() {
         account: 'default'
     }];
 
-    await chrome.storage.sync.set({ 
+    const payload = { 
         [STORAGE_KEYS.LEGACY_RULES]: defaultRules,
         [`${STORAGE_KEYS.RULES_PREFIX}default`]: defaultRules 
-    });
+    };
+
+    await chrome.storage.local.set(payload);
+    await chrome.storage.sync.set(payload);
     
     log('Default rules initialized');
 }
@@ -281,7 +320,7 @@ chrome.commands.onCommand.addListener((command) => {
 
 // Storage changes (for badge updates)
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'sync') {
+    if (areaName === 'sync' || areaName === 'local') {
         const hasRuleChanges = Object.keys(changes).some(key => 
             key.startsWith(STORAGE_KEYS.RULES_PREFIX)
         );

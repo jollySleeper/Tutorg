@@ -10,6 +10,14 @@ import { logger, generateId } from './utils.js';
  * Storage service for managing extension data
  */
 class StorageService {
+    _getRuleKeys(account = 'default') {
+        return {
+            accountKey: `${STORAGE_KEYS.RULES_PREFIX}${account}`,
+            defaultKey: `${STORAGE_KEYS.RULES_PREFIX}default`,
+            legacyKey: STORAGE_KEYS.LEGACY_RULES
+        };
+    }
+
     /**
      * Get rules for a specific account
      * @param {string} account - Account identifier
@@ -17,11 +25,30 @@ class StorageService {
      */
     async getRules(account = 'default') {
         try {
-            const storageKey = `${STORAGE_KEYS.RULES_PREFIX}${account}`;
-            const result = await chrome.storage.sync.get([storageKey, STORAGE_KEYS.LEGACY_RULES]);
-            
-            // Try account-specific first, then fallback to legacy
-            const rules = result[storageKey] || result[STORAGE_KEYS.LEGACY_RULES] || [];
+            const { accountKey, defaultKey, legacyKey } = this._getRuleKeys(account);
+            const keys = [accountKey, defaultKey, legacyKey];
+
+            // Prefer extension-local storage; fall back to sync for migration/backup
+            const [localResult, syncResult] = await Promise.all([
+                chrome.storage.local.get(keys),
+                chrome.storage.sync.get(keys)
+            ]);
+
+            // Priority: account -> default -> legacy (local first, then sync)
+            const rules =
+                localResult[accountKey] ||
+                localResult[defaultKey] ||
+                localResult[legacyKey] ||
+                syncResult[accountKey] ||
+                syncResult[defaultKey] ||
+                syncResult[legacyKey] ||
+                [];
+
+            // Migrate to local if we only found data in sync
+            if (!localResult[accountKey] && rules.length > 0) {
+                await chrome.storage.local.set({ [accountKey]: rules });
+            }
+
             logger.log('Loaded rules for account', account, ':', rules.length, 'rules');
             return rules;
         } catch (error) {
@@ -38,8 +65,13 @@ class StorageService {
      */
     async saveRules(rules, account = 'default') {
         try {
-            const storageKey = `${STORAGE_KEYS.RULES_PREFIX}${account}`;
-            await chrome.storage.sync.set({ [storageKey]: rules });
+            const { accountKey, defaultKey } = this._getRuleKeys(account);
+            const payload = { [accountKey]: rules, [defaultKey]: rules };
+
+            // Write to local for durability; mirror to sync for backup/cross-device
+            await chrome.storage.local.set(payload);
+            await chrome.storage.sync.set(payload);
+
             logger.log('Saved', rules.length, 'rules for account:', account);
             return true;
         } catch (error) {
@@ -77,7 +109,12 @@ class StorageService {
      */
     async getEnabledRulesCount() {
         try {
-            const allStorage = await chrome.storage.sync.get(null);
+            // Merge local-first then sync (local wins on conflicts)
+            const [localAll, syncAll] = await Promise.all([
+                chrome.storage.local.get(null),
+                chrome.storage.sync.get(null)
+            ]);
+            const allStorage = { ...syncAll, ...localAll };
             let count = 0;
             
             for (const [key, value] of Object.entries(allStorage)) {
