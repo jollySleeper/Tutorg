@@ -15,6 +15,7 @@ const SELECTORS = {
     badgeLine: '.badge-line-height',
     textEllipsis: '.text-ellipsis',
     teamLabel: '.teamLabel',
+    listContainer: '[data-testid="unordered_list"]',
     checkbox: [
         'input[type="checkbox"].list-checkbox',
         'input[type="checkbox"].checkbox',
@@ -36,10 +37,12 @@ const BUTTON_TITLES = {
 };
 
 const TIMING = {
-    actionDelay: 500,
-    quickActionDelay: 300,
-    folderDelay: 800,
-    indicatorTimeout: 4000
+    actionDelay: 1000,      // wait after primary actions (trash/archive/move)
+    quickActionDelay: 1000, // wait after lighter actions (mark read/unread)
+    folderDelay: 2000,      // wait after selecting a folder in Move dropdown
+    indicatorTimeout: 4000,
+    rowSettleTimeout: 2000, // max wait for moved/deleted rows to disappear
+    scrollResetDelay: 500   // wait after forcing scroll-to-top before reading rows
 };
 
 const TUTA_EMAIL_DOMAINS = [
@@ -58,6 +61,56 @@ const logWarn = (...args) => console.warn(LOG_PREFIX, ...args);
 // Utility Functions
 // ============================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function resetScrollBeforeCollect() {
+    const list = $(SELECTORS.listContainer) || document.querySelector('.list-container.overflow-y-scroll');
+    if (list) {
+        log('Resetting list scroll to top');
+        if (typeof list.scrollTo === 'function') {
+            list.scrollTo({ top: 0, behavior: 'instant' });
+        } else {
+            list.scrollTop = 0;
+        }
+    } else {
+        logWarn('List container not found; cannot reset scroll');
+    }
+    await sleep(TIMING.scrollResetDelay);
+}
+
+/**
+ * Wait until all given rows are gone/hidden, or timeout reached.
+ */
+async function waitForRowsToDisappear(rows, timeout = TIMING.rowSettleTimeout) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+        const allGone = rows.every(r => !r?.isConnected || r.offsetParent === null);
+        if (allGone) return true;
+        await sleep(200);
+    }
+    logWarn('Timeout waiting for rows to disappear after action');
+    return false;
+}
+
+async function ensureNoSelectionBeforeRun() {
+    const attempts = 3;
+    for (let i = 0; i < attempts; i++) {
+        const checked = document.querySelectorAll(`${SELECTORS.emailRow} input[type="checkbox"]:checked`);
+        if (checked.length === 0) return true;
+        
+        logWarn(`Attempt ${i + 1}/${attempts}: Found ${checked.length} pre-selected email(s); waiting before running rules`);
+        if (i < attempts - 1) {
+            await sleep(1000);
+        }
+    }
+    
+    const finalChecked = document.querySelectorAll(`${SELECTORS.emailRow} input[type="checkbox"]:checked`).length;
+    if (finalChecked > 0) {
+        logWarn('Aborting rule run: selection still present after retries');
+        showIndicator('Please clear current selections, then run rules again');
+        return false;
+    }
+    return true;
+}
 
 const $ = (selector, context = document) => {
     try {
@@ -414,40 +467,50 @@ async function performAction(action, count, rule = {}) {
             if (btn) {
                 btn.click();
                 await sleep(TIMING.actionDelay);
+                return true;
             }
+            return false;
         },
         archive: async () => {
             const btn = findButton(BUTTON_TITLES.archive);
             if (btn) {
                 btn.click();
                 await sleep(TIMING.actionDelay);
+                return true;
             }
+            return false;
         },
         'move-to-folder': async () => {
             if (rule.targetFolder) {
-                await moveToFolder(rule.targetFolder);
+                return await moveToFolder(rule.targetFolder);
             }
+            return false;
         },
         'mark-read': async () => {
             const btn = findButton(BUTTON_TITLES.markRead);
             if (btn) {
                 btn.click();
                 await sleep(TIMING.quickActionDelay);
+                return true;
             }
+            return false;
         },
         'mark-unread': async () => {
             const btn = findButton(BUTTON_TITLES.markUnread);
             if (btn) {
                 btn.click();
                 await sleep(TIMING.quickActionDelay);
+                return true;
             }
+            return false;
         }
     };
     
     const actionFn = actions[action];
     if (actionFn) {
-        await actionFn();
+        return await actionFn();
     }
+    return false;
 }
 
 // ============================================
@@ -464,9 +527,12 @@ async function processRule(rule, emailsData) {
     log(`Processing rule: ${rule.name}`);
     
     if (rule.matchType === 'sender-and-subject') {
-        log(`  Sender: "${rule.senderValue}", Subject: "${rule.subjectValue}"`);
+        const senders = getValuesArray(rule.senderValues);
+        const subjects = getValuesArray(rule.subjectValues);
+        log(`  Sender values: ${senders.join(' | ') || '(none)'}, Subject values: ${subjects.join(' | ') || '(none)'}`);
     } else {
-        log(`  Match: "${rule.matchValue}"`);
+        const matches = getValuesArray(rule.matchValues);
+        log(`  Match values: ${matches.join(' | ') || '(none)'}`);
     }
     
     // Find matches from pre-collected data
@@ -478,6 +544,7 @@ async function processRule(rule, emailsData) {
     }
     
     log(`  Found ${matches.length} match(es)`);
+    log(`  Rule "${rule.name}", Matches:`, matches.map(m => `${m.sender} | ${m.subject}`));
     
     // Get actual row elements
     const rows = matches.map(m => m.row);
@@ -486,10 +553,15 @@ async function processRule(rule, emailsData) {
     await sleep(TIMING.actionDelay);
     
     if (rule.action !== 'select-only') {
-        await performAction(rule.action, matches.length, rule);
+        const actionOk = await performAction(rule.action, matches.length, rule);
         
         // Mark these emails as processed (they've been moved/deleted)
         matches.forEach(m => m.processed = true);
+
+        // Wait for the selected rows to disappear/clear to ensure the move/trash finished
+        if (actionOk && ['trash', 'archive', 'move-to-folder'].includes(rule.action)) {
+            await waitForRowsToDisappear(rows);
+        }
     }
     
     return matches.length;
@@ -497,26 +569,31 @@ async function processRule(rule, emailsData) {
 
 /**
  * Run all rules on current page
- * Collects emails ONCE then applies all rules
+ * Collects emails fresh before each rule to avoid stale/stale-reused rows
  */
 async function runRulesOnPage(rules) {
     log(`Starting rule execution with ${rules.length} rules`);
     
     try {
-        // IMPORTANT: Collect all emails ONCE before processing any rules
-        const emailsData = collectAllEmails();
-        log(`Collected ${emailsData.length} emails to process`);
-        
-        if (emailsData.length === 0) {
-            showIndicator('No emails visible');
-            return { success: true, message: 'No emails visible', results: [] };
-        }
-        
         let totalProcessed = 0;
         const results = [];
         
-        // Process each rule against the same collected emails
         for (const rule of rules) {
+            const okRule = await ensureNoSelectionBeforeRun();
+            if (!okRule) {
+                return { success: false, message: `Selections present before rule "${rule.name}". Clear selection and retry.` };
+            }
+            // Reset scroll so we collect the full visible list (UI may have scrolled down)
+            await resetScrollBeforeCollect();
+
+            const emailsData = collectAllEmails();
+            log(`Collected ${emailsData.length} emails for rule "${rule.name}"`);
+
+            if (emailsData.length === 0) {
+                log('No emails visible; stopping rule execution');
+                break;
+            }
+
             const count = await processRule(rule, emailsData);
             totalProcessed += count;
             results.push({ rule: rule.name, count });
