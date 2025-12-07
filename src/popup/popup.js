@@ -26,6 +26,7 @@ class PopupController {
         this._currentAccount = 'default';
         this._isDetectingAccount = false;
         this._availableFolders = [];
+        this._extensionVersion = 'unknown';
     }
 
     /**
@@ -33,6 +34,9 @@ class PopupController {
      */
     async init() {
         logger.log('Initializing popup...');
+
+        // Capture extension version from manifest to keep exports in sync
+        this._extensionVersion = chrome.runtime?.getManifest?.().version || 'unknown';
         
         // Hide open buttons when not in popup mode (already in window/tab)
         if (!tabs.isPopupMode()) {
@@ -688,7 +692,7 @@ class PopupController {
         }
 
         const exportData = {
-            version: '2.0',
+            version: this._extensionVersion,
             exportedAt: new Date().toISOString(),
             account: this._currentAccount,
             rules
